@@ -4,10 +4,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.validation.Valid; // ✅ ADD THIS
+
 import com.sms.backend.dto.ForgotPasswordRequest;
 import com.sms.backend.dto.LoginRequest;
 import com.sms.backend.dto.LoginResponse;
-import com.sms.backend.dto.ResetPasswordRequest; // ✅ ADD THIS
+import com.sms.backend.dto.ResetPasswordRequest;
 import com.sms.backend.dto.SignupRequest;
 import com.sms.backend.dto.SignupResponse;
 import com.sms.backend.service.AuthService;
@@ -23,8 +25,9 @@ public class AuthController {
         this.authService = authService;
     }
 
+    // ✅ LOGIN
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) { // ✅ @Valid
         try {
             LoginResponse response = authService.login(request);
             return ResponseEntity.ok(response);
@@ -34,8 +37,9 @@ public class AuthController {
         }
     }
 
+    // ✅ SIGNUP
     @PostMapping("/signup")
-    public ResponseEntity<?> signup(@RequestBody SignupRequest request) {
+    public ResponseEntity<?> signup(@Valid @RequestBody SignupRequest request) { // ✅ @Valid
         try {
             SignupResponse response = authService.signup(request);
             return ResponseEntity.ok(response);
@@ -45,8 +49,9 @@ public class AuthController {
         }
     }
 
+    // ✅ FORGOT PASSWORD
     @PostMapping("/forgot-password")
-    public ResponseEntity<?> forgotPassword(@RequestBody ForgotPasswordRequest request) {
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) { // ✅ @Valid
         try {
             String message = authService.forgotPassword(request);
             return ResponseEntity.ok(new ErrorResponse(message));
@@ -56,9 +61,9 @@ public class AuthController {
         }
     }
 
-    // ✅ NEW RESET PASSWORD ENDPOINT
+    // ✅ RESET PASSWORD
     @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(@RequestBody ResetPasswordRequest request) {
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordRequest request) { // ✅ @Valid
         try {
             String message = authService.resetPassword(request);
             return ResponseEntity.ok(new ErrorResponse(message));
@@ -68,11 +73,11 @@ public class AuthController {
         }
     }
 
+    // Error Response Class
     public static class ErrorResponse {
         private String message;
 
-        public ErrorResponse() {
-        }
+        public ErrorResponse() {}
 
         public ErrorResponse(String message) {
             this.message = message;

@@ -24,4 +24,11 @@ public class AnnouncementController {
     public List<Announcement> getAllAnnouncements() {
         return announcementService.getAllAnnouncements();
     }
+
+    // ✅ ADD THIS DELETE API
+    @DeleteMapping("/{id}")
+    public String deleteAnnouncement(@PathVariable String id) {
+        announcementService.deleteAnnouncement(id);
+        return "Deleted successfully";
+    }
 }

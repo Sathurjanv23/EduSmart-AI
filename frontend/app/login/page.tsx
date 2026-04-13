@@ -19,11 +19,24 @@ export default function LoginPage() {
 
   const [forgotEmail, setForgotEmail] = useState("");
 
+  const validateEmail = (value: string) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  };
+
+  const validatePassword = (value: string) => {
+    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&.#_-]).{8,}$/.test(value);
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email || !password) {
-      alert("Enter email and password");
+    if (!validateEmail(email)) {
+      alert("Enter a valid email address");
+      return;
+    }
+
+    if (!password.trim()) {
+      alert("Password is required");
       return;
     }
 
@@ -55,8 +68,25 @@ export default function LoginPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!signupName || !signupEmail || !signupPassword || !signupRole) {
-      alert("Fill all signup fields");
+    if (!signupName.trim()) {
+      alert("Name is required");
+      return;
+    }
+
+    if (!validateEmail(signupEmail)) {
+      alert("Enter a valid email address");
+      return;
+    }
+
+    if (!validatePassword(signupPassword)) {
+      alert(
+        "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+      );
+      return;
+    }
+
+    if (!signupRole) {
+      alert("Select a role");
       return;
     }
 
@@ -84,8 +114,13 @@ export default function LoginPage() {
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!forgotEmail) {
+    if (!forgotEmail.trim()) {
       alert("Enter your email");
+      return;
+    }
+
+    if (!validateEmail(forgotEmail)) {
+      alert("Enter a valid email address");
       return;
     }
 

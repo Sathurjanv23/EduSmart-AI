@@ -20,4 +20,11 @@ public class AnnouncementService {
     public List<Announcement> getAllAnnouncements() {
         return announcementRepository.findAll();
     }
+
+    public void deleteAnnouncement(String id) {
+        if (!announcementRepository.existsById(id)) {
+            throw new RuntimeException("Announcement not found: " + id);
+        }
+        announcementRepository.deleteById(id);
+    }
 }

@@ -33,9 +33,29 @@ export default function TeacherPage() {
   }, [router]);
 
   const fetchData = async () => {
-    setAttendanceList(await getAllAttendance());
-    setMarksList(await getAllMarks());
-    setStudents(await getAllStudents());
+    try {
+      const studentsData = await getAllStudents();
+      setStudents(studentsData || []);
+    } catch (error) {
+      console.error("Error fetching students:", error);
+      setStudents([]);
+    }
+
+    try {
+      const attendanceData = await getAllAttendance();
+      setAttendanceList(attendanceData || []);
+    } catch (error) {
+      console.error("Error fetching attendance:", error);
+      setAttendanceList([]);
+    }
+
+    try {
+      const marksData = await getAllMarks();
+      setMarksList(marksData || []);
+    } catch (error) {
+      console.error("Error fetching marks:", error);
+      setMarksList([]);
+    }
   };
 
   const handleLogout = () => {
@@ -51,11 +71,30 @@ export default function TeacherPage() {
       return;
     }
 
-    await markAttendance({ studentName, date, status });
-    setStudentName("");
-    setDate("");
-    setStatus("");
-    fetchData();
+    const selectedStudent = students.find((s) => s.name === studentName);
+
+    if (!selectedStudent) {
+      alert("Selected student not found");
+      return;
+    }
+
+    try {
+      await markAttendance({
+        studentName,
+        parentEmail: selectedStudent.parentEmail,
+        date,
+        status,
+      });
+
+      setStudentName("");
+      setDate("");
+      setStatus("");
+      await fetchData();
+      alert("Attendance marked successfully");
+    } catch (error) {
+      console.error("Attendance error:", error);
+      alert("Failed to mark attendance");
+    }
   };
 
   const handleMarks = async (e: React.FormEvent) => {
@@ -66,23 +105,35 @@ export default function TeacherPage() {
       return;
     }
 
-    await addMarks({
-      studentName: markStudentName,
-      subject,
-      marks: Number(marks),
-    });
+    const selectedStudent = students.find((s) => s.name === markStudentName);
 
-    setMarkStudentName("");
-    setSubject("");
-    setMarks("");
-    fetchData();
+    if (!selectedStudent) {
+      alert("Selected student not found");
+      return;
+    }
+
+    try {
+      await addMarks({
+        studentName: markStudentName,
+        parentEmail: selectedStudent.parentEmail,
+        subject,
+        marks: Number(marks),
+      });
+
+      setMarkStudentName("");
+      setSubject("");
+      setMarks("");
+      await fetchData();
+      alert("Marks added successfully");
+    } catch (error) {
+      console.error("Marks error:", error);
+      alert("Failed to add marks");
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white">
       <div className="flex min-h-screen">
-        
-        {/* Sidebar */}
         <aside className="hidden lg:flex w-72 flex-col border-r border-white/10 bg-white/5 backdrop-blur-xl">
           <div className="px-6 py-8 border-b border-white/10">
             <h1 className="text-2xl font-bold">Teacher Panel</h1>
@@ -108,10 +159,7 @@ export default function TeacherPage() {
           </div>
         </aside>
 
-        {/* Main */}
         <main className="flex-1 p-6 md:p-8 space-y-8">
-
-          {/* Header */}
           <div>
             <p className="text-indigo-300 uppercase text-sm tracking-widest">
               Welcome Back
@@ -119,15 +167,11 @@ export default function TeacherPage() {
             <h1 className="text-4xl font-bold mt-2">Teacher Dashboard</h1>
           </div>
 
-          {/* Forms */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-
-            {/* Attendance */}
             <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl">
               <h2 className="text-xl font-bold mb-4">Mark Attendance</h2>
 
               <form onSubmit={handleAttendance} className="space-y-4">
-
                 <select
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
@@ -135,7 +179,7 @@ export default function TeacherPage() {
                 >
                   <option value="">Select student</option>
                   {students.map((s) => (
-                    <option key={s.id} value={s.name} className="text-black">
+                    <option key={s.id || s._id} value={s.name} className="text-black">
                       {s.name}
                     </option>
                   ))}
@@ -164,12 +208,10 @@ export default function TeacherPage() {
               </form>
             </div>
 
-            {/* Marks */}
             <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl">
               <h2 className="text-xl font-bold mb-4">Add Marks</h2>
 
               <form onSubmit={handleMarks} className="space-y-4">
-
                 <select
                   value={markStudentName}
                   onChange={(e) => setMarkStudentName(e.target.value)}
@@ -177,7 +219,7 @@ export default function TeacherPage() {
                 >
                   <option value="">Select student</option>
                   {students.map((s) => (
-                    <option key={s.id} value={s.name} className="text-black">
+                    <option key={s.id || s._id} value={s.name} className="text-black">
                       {s.name}
                     </option>
                   ))}
@@ -206,7 +248,6 @@ export default function TeacherPage() {
             </div>
           </div>
 
-          {/* Tables */}
           <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl">
             <h2 className="text-xl font-bold mb-4">Attendance List</h2>
 
@@ -214,14 +255,16 @@ export default function TeacherPage() {
               <thead className="text-slate-300">
                 <tr>
                   <th className="p-2 text-left">Student</th>
+                  <th className="p-2 text-left">Parent Email</th>
                   <th className="p-2 text-left">Date</th>
                   <th className="p-2 text-left">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {attendanceList.map((item) => (
-                  <tr key={item.id} className="border-t border-white/10">
+                  <tr key={item.id || item._id} className="border-t border-white/10">
                     <td className="p-2">{item.studentName}</td>
+                    <td className="p-2">{item.parentEmail || "-"}</td>
                     <td className="p-2">{item.date}</td>
                     <td className="p-2">{item.status}</td>
                   </tr>
@@ -237,14 +280,16 @@ export default function TeacherPage() {
               <thead className="text-slate-300">
                 <tr>
                   <th className="p-2 text-left">Student</th>
+                  <th className="p-2 text-left">Parent Email</th>
                   <th className="p-2 text-left">Subject</th>
                   <th className="p-2 text-left">Marks</th>
                 </tr>
               </thead>
               <tbody>
                 {marksList.map((item) => (
-                  <tr key={item.id} className="border-t border-white/10">
+                  <tr key={item.id || item._id} className="border-t border-white/10">
                     <td className="p-2">{item.studentName}</td>
+                    <td className="p-2">{item.parentEmail || "-"}</td>
                     <td className="p-2">{item.subject}</td>
                     <td className="p-2">{item.marks}</td>
                   </tr>
@@ -252,7 +297,6 @@ export default function TeacherPage() {
               </tbody>
             </table>
           </div>
-
         </main>
       </div>
     </div>

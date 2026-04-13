@@ -31,6 +31,7 @@ public class StudentService {
         if (student != null) {
             student.setName(updatedStudent.getName());
             student.setEmail(updatedStudent.getEmail());
+            student.setParentEmail(updatedStudent.getParentEmail());
             student.setStudentClass(updatedStudent.getStudentClass());
             student.setGender(updatedStudent.getGender());
 

@@ -1,9 +1,21 @@
+const API_BASE = "http://localhost:8080/api/auth";
+
+// helper function
+async function parseJsonSafely(response: Response) {
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return {};
+  }
+}
+
 // LOGIN
 export async function loginUser(loginData: {
   email: string;
   password: string;
 }) {
-  const response = await fetch("http://localhost:8080/api/auth/login", {
+  const response = await fetch(`${API_BASE}/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -14,7 +26,7 @@ export async function loginUser(loginData: {
     }),
   });
 
-  const data = await response.json();
+  const data = await parseJsonSafely(response);
 
   if (!response.ok) {
     throw new Error(data.message || "Login failed");
@@ -23,14 +35,14 @@ export async function loginUser(loginData: {
   return data;
 }
 
-// SIGNUP ✅ (ADD THIS)
+// SIGNUP
 export async function signupUser(signupData: {
   name: string;
   email: string;
   password: string;
   role: string;
 }) {
-  const response = await fetch("http://localhost:8080/api/auth/signup", {
+  const response = await fetch(`${API_BASE}/signup`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -43,10 +55,56 @@ export async function signupUser(signupData: {
     }),
   });
 
-  const data = await response.json();
+  const data = await parseJsonSafely(response);
 
   if (!response.ok) {
     throw new Error(data.message || "Signup failed");
+  }
+
+  return data;
+}
+
+// FORGOT PASSWORD
+export async function forgotPassword(email: string) {
+  const response = await fetch(`${API_BASE}/forgot-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email: email.toLowerCase().trim(),
+    }),
+  });
+
+  const data = await parseJsonSafely(response);
+
+  if (!response.ok) {
+    throw new Error(data.message || "Forgot password failed");
+  }
+
+  return data;
+}
+
+// RESET PASSWORD
+export async function resetPassword(resetData: {
+  token: string;
+  newPassword: string;
+}) {
+  const response = await fetch(`${API_BASE}/reset-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      token: resetData.token.trim(),
+      newPassword: resetData.newPassword.trim(),
+    }),
+  });
+
+  const data = await parseJsonSafely(response);
+
+  if (!response.ok) {
+    throw new Error(data.message || "Reset password failed");
   }
 
   return data;

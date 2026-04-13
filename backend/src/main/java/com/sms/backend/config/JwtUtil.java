@@ -48,7 +48,7 @@ public class JwtUtil {
     public boolean isTokenValid(String token) {
         try {
             Claims claims = extractClaims(token);
-            return claims.getExpiration().after(new Date());
+            return claims.getSubject() != null && claims.getExpiration().after(new Date());
         } catch (Exception e) {
             return false;
         }

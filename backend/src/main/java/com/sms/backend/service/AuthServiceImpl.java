@@ -36,13 +36,13 @@ public class AuthServiceImpl implements AuthService {
         Optional<User> optionalUser = userRepository.findByEmail(request.getEmail());
 
         if (optionalUser.isEmpty()) {
-            throw new RuntimeException("User not found");
+            throw new RuntimeException("Invalid email or password");
         }
 
         User user = optionalUser.get();
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new RuntimeException("Invalid password");
+            throw new RuntimeException("Invalid email or password");
         }
 
         String token = jwtUtil.generateToken(user.getEmail(), user.getRole());
@@ -73,7 +73,7 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         String resetToken = UUID.randomUUID().toString();
-        long expiryTime = System.currentTimeMillis() + (1000 * 60 * 15);
+        long expiryTime = System.currentTimeMillis() + (1000 * 60 * 15); // 15 minutes
 
         user.setResetToken(resetToken);
         user.setResetTokenExpiry(expiryTime);
@@ -81,7 +81,6 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
 
         String resetLink = "http://localhost:3000/reset-password?token=" + resetToken;
-
         System.out.println("RESET LINK: " + resetLink);
 
         return "Password reset link generated. Check backend console.";
@@ -93,7 +92,7 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new RuntimeException("Invalid reset token"));
 
         if (user.getResetTokenExpiry() == null ||
-            user.getResetTokenExpiry() < System.currentTimeMillis()) {
+                user.getResetTokenExpiry() < System.currentTimeMillis()) {
             throw new RuntimeException("Reset token expired");
         }
 

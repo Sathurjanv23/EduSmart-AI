@@ -10,15 +10,17 @@ public class Marks {
     private String id;
 
     private String studentName;
+    private String parentEmail;
     private String subject;
     private int marks;
 
     public Marks() {
     }
 
-    public Marks(String id, String studentName, String subject, int marks) {
+    public Marks(String id, String studentName, String parentEmail, String subject, int marks) {
         this.id = id;
         this.studentName = studentName;
+        this.parentEmail = parentEmail;
         this.subject = subject;
         this.marks = marks;
     }
@@ -29,6 +31,10 @@ public class Marks {
 
     public String getStudentName() {
         return studentName;
+    }
+
+    public String getParentEmail() {
+        return parentEmail;
     }
 
     public String getSubject() {
@@ -45,6 +51,10 @@ public class Marks {
 
     public void setStudentName(String studentName) {
         this.studentName = studentName;
+    }
+
+    public void setParentEmail(String parentEmail) {
+        this.parentEmail = parentEmail;
     }
 
     public void setSubject(String subject) {

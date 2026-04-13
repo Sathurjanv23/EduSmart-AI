@@ -10,15 +10,17 @@ public class Attendance {
     private String id;
 
     private String studentName;
+    private String parentEmail;
     private String date;
     private String status;
 
     public Attendance() {
     }
 
-    public Attendance(String id, String studentName, String date, String status) {
+    public Attendance(String id, String studentName, String parentEmail, String date, String status) {
         this.id = id;
         this.studentName = studentName;
+        this.parentEmail = parentEmail;
         this.date = date;
         this.status = status;
     }
@@ -29,6 +31,10 @@ public class Attendance {
 
     public String getStudentName() {
         return studentName;
+    }
+
+    public String getParentEmail() {
+        return parentEmail;
     }
 
     public String getDate() {
@@ -45,6 +51,10 @@ public class Attendance {
 
     public void setStudentName(String studentName) {
         this.studentName = studentName;
+    }
+
+    public void setParentEmail(String parentEmail) {
+        this.parentEmail = parentEmail;
     }
 
     public void setDate(String date) {

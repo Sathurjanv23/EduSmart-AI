@@ -18,7 +18,7 @@ public class User {
     private String password;
     private String role;
 
-    // ✅ ADD THIS (for reset password)
+    // Reset password fields
     private String resetToken;
     private Long resetTokenExpiry;
 
@@ -56,7 +56,7 @@ public class User {
     }
 
     public void setEmail(String email) {
-        this.email = email;
+        this.email = email.toLowerCase().trim(); // 🔥 improvement
     }
 
     public String getPassword() {
@@ -72,10 +72,8 @@ public class User {
     }
 
     public void setRole(String role) {
-        this.role = role;
+        this.role = role.toUpperCase(); // 🔥 consistency
     }
-
-    // ✅ NEW GETTERS/SETTERS
 
     public String getResetToken() {
         return resetToken;

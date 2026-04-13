@@ -1,6 +1,7 @@
 export async function addStudent(studentData: {
   name: string;
   email: string;
+  parentEmail: string;
   studentClass: string;
   gender: string;
 }) {
@@ -66,6 +67,7 @@ export async function updateStudent(
   studentData: {
     name: string;
     email: string;
+    parentEmail: string;
     studentClass: string;
     gender: string;
   }

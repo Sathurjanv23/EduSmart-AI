@@ -35,18 +35,16 @@ export default function ParentPage() {
         const marksData = await getAllMarks();
         const announcementData = await getAllAnnouncements();
 
-        console.log("USER =", user);
-        console.log("ATTENDANCE =", attendanceData);
-        console.log("MARKS =", marksData);
+        const parentEmail = user.email?.trim().toLowerCase();
 
-        const filteredAttendance = (attendanceData || []).filter((item: any) =>
-          item.studentName?.trim().toLowerCase() ===
-          user.name?.trim().toLowerCase()
+        const filteredAttendance = (attendanceData || []).filter(
+          (item: any) =>
+            item.parentEmail?.trim().toLowerCase() === parentEmail
         );
 
-        const filteredMarks = (marksData || []).filter((item: any) =>
-          item.studentName?.trim().toLowerCase() ===
-          user.name?.trim().toLowerCase()
+        const filteredMarks = (marksData || []).filter(
+          (item: any) =>
+            item.parentEmail?.trim().toLowerCase() === parentEmail
         );
 
         setAttendanceList(filteredAttendance);
@@ -76,24 +74,24 @@ export default function ParentPage() {
 
   const menuClass = (section: string) =>
     activeSection === section
-      ? "rounded-2xl bg-indigo-500/20 border border-indigo-400/30 px-4 py-3 text-sm text-indigo-200 w-full text-left transition"
-      : "rounded-2xl hover:bg-white/5 px-4 py-3 text-sm text-slate-300 w-full text-left transition";
+      ? "w-full rounded-2xl border border-indigo-400/30 bg-indigo-500/20 px-4 py-3 text-left text-sm text-indigo-200 transition"
+      : "w-full rounded-2xl px-4 py-3 text-left text-sm text-slate-300 transition hover:bg-white/5";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white">
       <div className="flex min-h-screen">
         {/* Sidebar */}
-        <aside className="hidden lg:flex w-72 flex-col border-r border-white/10 bg-white/5 backdrop-blur-xl sticky top-0 h-screen">
-          <div className="px-6 py-8 border-b border-white/10">
+        <aside className="sticky top-0 hidden h-screen w-72 flex-col border-r border-white/10 bg-white/5 backdrop-blur-xl lg:flex">
+          <div className="border-b border-white/10 px-6 py-8">
             <h1 className="text-2xl font-bold tracking-wide text-white">
               Parent Panel
             </h1>
-            <p className="text-sm text-slate-300 mt-2">
+            <p className="mt-2 text-sm text-slate-300">
               Child progress monitoring system
             </p>
           </div>
 
-          <nav className="flex-1 px-4 py-6 space-y-3">
+          <nav className="flex-1 space-y-3 px-4 py-6">
             <button
               onClick={() => scrollToSection("dashboard", dashboardRef)}
               className={menuClass("dashboard")}
@@ -130,10 +128,10 @@ export default function ParentPage() {
             </button>
           </nav>
 
-          <div className="p-4 border-t border-white/10">
+          <div className="border-t border-white/10 p-4">
             <button
               onClick={handleLogout}
-              className="w-full rounded-2xl bg-red-500 hover:bg-red-600 px-4 py-3 text-sm font-semibold transition"
+              className="w-full rounded-2xl bg-red-500 px-4 py-3 text-sm font-semibold transition hover:bg-red-600"
             >
               Logout
             </button>
@@ -141,7 +139,7 @@ export default function ParentPage() {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 space-y-8">
+        <main className="flex-1 space-y-8 p-4 md:p-6 lg:p-8">
           {/* Dashboard */}
           <div ref={dashboardRef}>
             <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -149,7 +147,7 @@ export default function ParentPage() {
                 <p className="text-sm uppercase tracking-[0.2em] text-indigo-300">
                   Welcome back
                 </p>
-                <h2 className="mt-2 text-3xl md:text-4xl font-bold">
+                <h2 className="mt-2 text-3xl font-bold md:text-4xl">
                   Parent Dashboard
                 </h2>
                 <p className="mt-2 text-slate-300">
@@ -159,35 +157,35 @@ export default function ParentPage() {
 
               <button
                 onClick={handleLogout}
-                className="lg:hidden w-fit rounded-xl bg-red-500 px-5 py-2.5 font-medium hover:bg-red-600 transition"
+                className="w-fit rounded-xl bg-red-500 px-5 py-2.5 font-medium transition hover:bg-red-600 lg:hidden"
               >
                 Logout
               </button>
             </div>
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-3xl border border-white/10 bg-white/10 backdrop-blur-xl p-6 shadow-2xl">
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur-xl">
                 <p className="text-sm text-slate-300">Announcements</p>
                 <h3 className="mt-3 text-4xl font-bold text-emerald-300">
                   {announcements.length}
                 </h3>
               </div>
 
-              <div className="rounded-3xl border border-white/10 bg-white/10 backdrop-blur-xl p-6 shadow-2xl">
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur-xl">
                 <p className="text-sm text-slate-300">Attendance Records</p>
                 <h3 className="mt-3 text-4xl font-bold text-cyan-300">
                   {attendanceList.length}
                 </h3>
               </div>
 
-              <div className="rounded-3xl border border-white/10 bg-white/10 backdrop-blur-xl p-6 shadow-2xl">
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur-xl">
                 <p className="text-sm text-slate-300">Marks Entries</p>
                 <h3 className="mt-3 text-4xl font-bold text-pink-300">
                   {marksList.length}
                 </h3>
               </div>
 
-              <div className="rounded-3xl border border-white/10 bg-white/10 backdrop-blur-xl p-6 shadow-2xl">
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur-xl">
                 <p className="text-sm text-slate-300">Status</p>
                 <h3 className="mt-3 text-2xl font-bold text-violet-300">
                   Active
@@ -199,7 +197,7 @@ export default function ParentPage() {
           {/* Announcements */}
           <div
             ref={announcementsRef}
-            className="rounded-3xl border border-white/10 bg-white/10 backdrop-blur-xl p-6 shadow-2xl"
+            className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur-xl"
           >
             <div className="mb-5">
               <h3 className="text-2xl font-bold">Announcements</h3>
@@ -213,12 +211,12 @@ export default function ParentPage() {
                 announcements.map((item, index) => (
                   <div
                     key={item.id || index}
-                    className="rounded-2xl border border-white/10 bg-white/5 p-5 hover:bg-white/10 transition"
+                    className="rounded-2xl border border-white/10 bg-white/5 p-5 transition hover:bg-white/10"
                   >
                     <h4 className="text-lg font-semibold text-emerald-300">
                       {item.title}
                     </h4>
-                    <p className="mt-2 text-slate-300 leading-7">
+                    <p className="mt-2 leading-7 text-slate-300">
                       {item.message}
                     </p>
                   </div>
@@ -232,7 +230,7 @@ export default function ParentPage() {
           {/* Attendance */}
           <div
             ref={attendanceRef}
-            className="rounded-3xl border border-white/10 bg-white/10 backdrop-blur-xl p-6 shadow-2xl overflow-hidden"
+            className="overflow-hidden rounded-3xl border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur-xl"
           >
             <div className="mb-5">
               <h3 className="text-2xl font-bold">Child Attendance</h3>
@@ -255,7 +253,7 @@ export default function ParentPage() {
                     attendanceList.map((item, index) => (
                       <tr
                         key={item.id || index}
-                        className="bg-white/5 hover:bg-white/10 transition"
+                        className="bg-white/5 transition hover:bg-white/10"
                       >
                         <td className="rounded-l-2xl px-4 py-4 font-medium">
                           {item.studentName}
@@ -265,10 +263,10 @@ export default function ParentPage() {
                         </td>
                         <td className="rounded-r-2xl px-4 py-4">
                           <span
-                            className={`rounded-full px-3 py-1 text-sm border ${
+                            className={`rounded-full border px-3 py-1 text-sm ${
                               item.status === "Present"
-                                ? "bg-green-500/20 text-green-300 border-green-400/20"
-                                : "bg-red-500/20 text-red-300 border-red-400/20"
+                                ? "border-green-400/20 bg-green-500/20 text-green-300"
+                                : "border-red-400/20 bg-red-500/20 text-red-300"
                             }`}
                           >
                             {item.status}
@@ -294,7 +292,7 @@ export default function ParentPage() {
           {/* Marks */}
           <div
             ref={marksRef}
-            className="rounded-3xl border border-white/10 bg-white/10 backdrop-blur-xl p-6 shadow-2xl overflow-hidden"
+            className="overflow-hidden rounded-3xl border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur-xl"
           >
             <div className="mb-5">
               <h3 className="text-2xl font-bold">Child Marks</h3>
@@ -317,7 +315,7 @@ export default function ParentPage() {
                     marksList.map((item, index) => (
                       <tr
                         key={item.id || index}
-                        className="bg-white/5 hover:bg-white/10 transition"
+                        className="bg-white/5 transition hover:bg-white/10"
                       >
                         <td className="rounded-l-2xl px-4 py-4 font-medium">
                           {item.studentName}
@@ -326,7 +324,7 @@ export default function ParentPage() {
                           {item.subject}
                         </td>
                         <td className="rounded-r-2xl px-4 py-4">
-                          <span className="rounded-full bg-indigo-500/20 px-3 py-1 text-sm text-indigo-200 border border-indigo-400/20">
+                          <span className="rounded-full border border-indigo-400/20 bg-indigo-500/20 px-3 py-1 text-sm text-indigo-200">
                             {item.marks}
                           </span>
                         </td>
@@ -350,7 +348,7 @@ export default function ParentPage() {
           {/* Settings */}
           <div
             ref={settingsRef}
-            className="rounded-3xl border border-white/10 bg-white/10 backdrop-blur-xl p-6 shadow-2xl"
+            className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur-xl"
           >
             <div className="mb-5">
               <h3 className="text-2xl font-bold">Settings</h3>

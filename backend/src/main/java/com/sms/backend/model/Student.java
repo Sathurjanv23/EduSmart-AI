@@ -11,16 +11,18 @@ public class Student {
 
     private String name;
     private String email;
+    private String parentEmail;
     private String studentClass;
     private String gender;
 
     public Student() {
     }
 
-    public Student(String id, String name, String email, String studentClass, String gender) {
+    public Student(String id, String name, String email, String parentEmail, String studentClass, String gender) {
         this.id = id;
         this.name = name;
         this.email = email;
+        this.parentEmail = parentEmail;
         this.studentClass = studentClass;
         this.gender = gender;
     }
@@ -47,6 +49,14 @@ public class Student {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getParentEmail() {
+        return parentEmail;
+    }
+
+    public void setParentEmail(String parentEmail) {
+        this.parentEmail = parentEmail;
     }
 
     public String getStudentClass() {

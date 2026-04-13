@@ -1,4 +1,4 @@
-export const loginUser = async (loginData: { email: string; password: string }) => {
+export const loginUser = async (loginData) => {
   const res = await fetch("http://localhost:8080/api/auth/login", {
     method: "POST",
     headers: {
@@ -16,12 +16,7 @@ export const loginUser = async (loginData: { email: string; password: string }) 
   return data;
 };
 
-export const signupUser = async (signupData: {
-  name: string;
-  email: string;
-  password: string;
-  role: string;
-}) => {
+export const signupUser = async (signupData) => {
   const res = await fetch("http://localhost:8080/api/auth/signup", {
     method: "POST",
     headers: {

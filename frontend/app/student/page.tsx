@@ -22,25 +22,41 @@ export default function StudentPage() {
       return;
     }
 
+    const loggedStudentName = (
+      user.name ||
+      user.fullName ||
+      user.studentName ||
+      ""
+    )
+      .toString()
+      .trim()
+      .toLowerCase();
+
     const fetchData = async () => {
       try {
         const attendanceData = await getAllAttendance();
         const marksData = await getAllMarks();
         const announcementData = await getAllAnnouncements();
 
-        const filteredAttendance = (attendanceData || []).filter(
-          (item: any) => item.studentName === user.name
+        const filteredAttendance = (attendanceData || []).filter((item: any) =>
+          (item.studentName || "")
+            .toString()
+            .trim()
+            .toLowerCase() === loggedStudentName
         );
 
-        const filteredMarks = (marksData || []).filter(
-          (item: any) => item.studentName === user.name
+        const filteredMarks = (marksData || []).filter((item: any) =>
+          (item.studentName || "")
+            .toString()
+            .trim()
+            .toLowerCase() === loggedStudentName
         );
 
         setAttendanceList(filteredAttendance);
         setMarksList(filteredMarks);
         setAnnouncements(announcementData || []);
       } catch (error) {
-        console.error(error);
+        console.error("Error fetching student data:", error);
       }
     };
 
@@ -55,8 +71,6 @@ export default function StudentPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white">
       <div className="flex min-h-screen">
-
-        {/* Sidebar */}
         <aside className="hidden lg:flex w-72 flex-col border-r border-white/10 bg-white/5 backdrop-blur-xl">
           <div className="px-6 py-8 border-b border-white/10">
             <h1 className="text-2xl font-bold">Student Panel</h1>
@@ -83,10 +97,7 @@ export default function StudentPage() {
           </div>
         </aside>
 
-        {/* Main */}
         <main className="flex-1 p-6 md:p-8 space-y-8">
-
-          {/* Header */}
           <div>
             <p className="text-indigo-300 uppercase text-sm tracking-widest">
               Welcome
@@ -97,7 +108,6 @@ export default function StudentPage() {
             </p>
           </div>
 
-          {/* Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div className="bg-white/10 border border-white/10 rounded-3xl p-6 shadow-2xl">
               <p className="text-sm text-slate-300">Announcements</p>
@@ -121,7 +131,6 @@ export default function StudentPage() {
             </div>
           </div>
 
-          {/* Announcements */}
           <div className="bg-white/10 border border-white/10 rounded-3xl p-6 shadow-2xl">
             <h2 className="text-2xl font-bold mb-4">Announcements</h2>
 
@@ -129,7 +138,7 @@ export default function StudentPage() {
               {announcements.length > 0 ? (
                 announcements.map((item) => (
                   <div
-                    key={item.id}
+                    key={item.id || item._id}
                     className="bg-white/5 border border-white/10 p-4 rounded-2xl"
                   >
                     <h3 className="text-lg font-semibold text-emerald-300">
@@ -144,7 +153,6 @@ export default function StudentPage() {
             </div>
           </div>
 
-          {/* Attendance */}
           <div className="bg-white/10 border border-white/10 rounded-3xl p-6 shadow-2xl">
             <h2 className="text-2xl font-bold mb-4">My Attendance</h2>
 
@@ -156,27 +164,24 @@ export default function StudentPage() {
                 </tr>
               </thead>
               <tbody>
-                {attendanceList.map((item) => (
-                  <tr key={item.id} className="border-t border-white/10">
-                    <td className="p-2">{item.date}</td>
-                    <td className="p-2">
-                      <span
-                        className={`px-3 py-1 rounded-full text-sm ${
-                          item.status === "Present"
-                            ? "bg-green-500/20 text-green-300"
-                            : "bg-red-500/20 text-red-300"
-                        }`}
-                      >
-                        {item.status}
-                      </span>
+                {attendanceList.length > 0 ? (
+                  attendanceList.map((item, index) => (
+                    <tr key={item.id || item._id || index} className="border-t border-white/10">
+                      <td className="p-2">{item.date}</td>
+                      <td className="p-2">{item.status}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={2} className="p-2 text-slate-400">
+                      No attendance records found
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
 
-          {/* Marks */}
           <div className="bg-white/10 border border-white/10 rounded-3xl p-6 shadow-2xl">
             <h2 className="text-2xl font-bold mb-4">My Marks</h2>
 
@@ -188,20 +193,23 @@ export default function StudentPage() {
                 </tr>
               </thead>
               <tbody>
-                {marksList.map((item) => (
-                  <tr key={item.id} className="border-t border-white/10">
-                    <td className="p-2">{item.subject}</td>
-                    <td className="p-2">
-                      <span className="bg-indigo-500/20 px-3 py-1 rounded-full text-indigo-200">
-                        {item.marks}
-                      </span>
+                {marksList.length > 0 ? (
+                  marksList.map((item, index) => (
+                    <tr key={item.id || item._id || index} className="border-t border-white/10">
+                      <td className="p-2">{item.subject}</td>
+                      <td className="p-2">{item.marks}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={2} className="p-2 text-slate-400">
+                      No marks records found
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
-
         </main>
       </div>
     </div>

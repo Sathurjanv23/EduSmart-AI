@@ -108,8 +108,8 @@ export default function SplashScreen({ logoLoaded }: SplashScreenProps) {
             </div>
 
             {/* title */}
-            <h1 className="animate-title-reveal bg-gradient-to-r from-cyan-300 via-sky-300 to-indigo-300 bg-clip-text text-5xl font-extrabold tracking-tight text-transparent md:text-7xl">
-              SMS System
+            <h1 className="animate-title-reveal bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 bg-clip-text text-5xl font-extrabold tracking-tight text-transparent md:text-7xl">
+              EduSmart
             </h1>
 
             <p className="animate-fade-up mt-4 text-xs uppercase tracking-[0.55em] text-slate-400 md:text-sm">

@@ -2,6 +2,7 @@ package com.sms.backend.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -29,17 +30,23 @@ public class SecurityConfig {
             .cors(Customizer.withDefaults())
             .csrf(csrf -> csrf.disable())
             .httpBasic(httpBasic -> httpBasic.disable())
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers("/api/auth/**", "/auth/**").permitAll()
+
                 .requestMatchers("/api/admin/**").hasAuthority("ADMIN")
                 .requestMatchers("/api/teacher/**").hasAnyAuthority("TEACHER", "ADMIN")
                 .requestMatchers("/api/student/**").hasAnyAuthority("STUDENT", "ADMIN")
                 .requestMatchers("/api/parent/**").hasAnyAuthority("PARENT", "ADMIN")
+
                 .requestMatchers("/api/announcements/**").authenticated()
                 .requestMatchers("/api/students/**").authenticated()
                 .requestMatchers("/api/attendance/**").authenticated()
                 .requestMatchers("/api/marks/**").authenticated()
+
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

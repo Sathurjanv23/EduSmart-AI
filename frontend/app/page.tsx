@@ -115,8 +115,8 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <h1 className="animate-title-reveal bg-gradient-to-r from-cyan-300 via-sky-300 to-indigo-300 bg-clip-text text-5xl font-extrabold tracking-tight text-transparent md:text-7xl">
-                SMS System
+              <h1 className="animate-title-reveal bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 bg-clip-text text-5xl font-extrabold tracking-tight text-transparent md:text-7xl">
+                EduSmart
               </h1>
 
               <p className="animate-fade-up mt-4 text-xs uppercase tracking-[0.55em] text-slate-400 md:text-sm">
@@ -356,8 +356,8 @@ export default function HomePage() {
               className="object-contain"
             />
             <div>
-              <h1 className="text-2xl font-bold text-cyan-300">SMS System</h1>
-              <p className="text-xs text-slate-300">School Management System</p>
+              <h1 className="text-2xl font-bold text-emerald-400">EduSmart</h1>
+              <p className="text-xs text-slate-300">Modern School Management System</p>
             </div>
           </div>
 
@@ -389,7 +389,7 @@ export default function HomePage() {
 
             <h2 className="text-4xl font-bold leading-tight md:text-6xl">
               Manage Your
-              <span className="text-cyan-300"> School </span>
+              <span className="text-emerald-400"> School </span>
               Smarter
             </h2>
 
@@ -575,7 +575,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="mt-10 border-t border-white/10 bg-white/5">
         <div className="mx-auto max-w-7xl px-6 py-6 text-center text-sm text-slate-400">
-          © 2026 SMS System · School Management System
+          © 2026 EduSmart · Modern School Management System
         </div>
       </footer>
     </div>

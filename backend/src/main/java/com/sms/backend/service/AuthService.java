@@ -1,11 +1,6 @@
 package com.sms.backend.service;
 
-import com.sms.backend.dto.ForgotPasswordRequest;
-import com.sms.backend.dto.LoginRequest;
-import com.sms.backend.dto.LoginResponse;
-import com.sms.backend.dto.ResetPasswordRequest; // ✅ ADD THIS
-import com.sms.backend.dto.SignupRequest;
-import com.sms.backend.dto.SignupResponse;
+import com.sms.backend.dto.*;
 
 public interface AuthService {
 
@@ -15,5 +10,10 @@ public interface AuthService {
 
     String forgotPassword(ForgotPasswordRequest request);
 
-    String resetPassword(ResetPasswordRequest request); // ✅ ADD THIS
+    String resetPassword(ResetPasswordRequest request);
+
+    // ── OTP ───────────────────────────────────────────────────────
+    LoginResponse verifyOtp(VerifyOtpRequest request);
+
+    String resendOtp(ResendOtpRequest request);
 }

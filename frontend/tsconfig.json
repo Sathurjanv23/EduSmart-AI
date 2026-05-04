@@ -13,6 +13,11 @@
     "incremental": true,
     "module": "esnext",
     "esModuleInterop": true,
+    "ignoreDeprecations": "5.0",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    },
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,

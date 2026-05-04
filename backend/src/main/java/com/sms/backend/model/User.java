@@ -18,12 +18,15 @@ public class User {
     private String password;
     private String role;
 
+    // Account status: PENDING (email not verified) | ACTIVE
+    private String status = "PENDING";
+    private boolean emailVerified = false;
+
     // Reset password fields
     private String resetToken;
     private Long resetTokenExpiry;
 
-    public User() {
-    }
+    public User() {}
 
     public User(String id, String name, String email, String password, String role) {
         this.id = id;
@@ -35,59 +38,30 @@ public class User {
 
     // ===== GETTERS & SETTERS =====
 
-    public String getId() {
-        return id;
-    }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 
-    public void setId(String id) {
-        this.id = id;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public String getName() {
-        return name;
-    }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email.toLowerCase().trim(); }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
 
-    public String getEmail() {
-        return email;
-    }
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role.toUpperCase(); }
 
-    public void setEmail(String email) {
-        this.email = email.toLowerCase().trim(); // 🔥 improvement
-    }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
-    public String getPassword() {
-        return password;
-    }
+    public boolean isEmailVerified() { return emailVerified; }
+    public void setEmailVerified(boolean emailVerified) { this.emailVerified = emailVerified; }
 
-    public void setPassword(String password) {
-        this.password = password;
-    }
+    public String getResetToken() { return resetToken; }
+    public void setResetToken(String resetToken) { this.resetToken = resetToken; }
 
-    public String getRole() {
-        return role;
-    }
-
-    public void setRole(String role) {
-        this.role = role.toUpperCase(); // 🔥 consistency
-    }
-
-    public String getResetToken() {
-        return resetToken;
-    }
-
-    public void setResetToken(String resetToken) {
-        this.resetToken = resetToken;
-    }
-
-    public Long getResetTokenExpiry() {
-        return resetTokenExpiry;
-    }
-
-    public void setResetTokenExpiry(Long resetTokenExpiry) {
-        this.resetTokenExpiry = resetTokenExpiry;
-    }
+    public Long getResetTokenExpiry() { return resetTokenExpiry; }
+    public void setResetTokenExpiry(Long resetTokenExpiry) { this.resetTokenExpiry = resetTokenExpiry; }
 }

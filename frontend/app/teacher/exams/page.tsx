@@ -1,231 +1,46 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { Award, FilePlus2, FileText, Send, X } from "lucide-react";
+import { createExam, getExamsByClass, publishExam } from "@/app/services/examService";
+import { addMarks } from "@/app/services/marksService";
+import { getTeacherClassStudents, getTeacherProfile } from "@/app/services/teacherService";
+import { Exam, Student } from "@/app/types/api";
+import { EmptyState, ErrorState, InlineNotice, LoadingState } from "@/components/AsyncState";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+const EMPTY_EXAM = { title: "", description: "", classId: "", subject: "", totalMarks: 100, passingMarks: 40, examType: "MIXED", startTime: "", endTime: "" };
+const EMPTY_MARK = { studentId: "", subject: "", marks: 0, totalMarks: 100, examId: "" };
 
-export default function ExamsPage() {
-  const [exams, setExams] = useState([]);
-  const [classId, setClassId] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    subject: '',
-    totalMarks: 0,
-    passingMarks: 0,
-    examType: 'MCQ',
-    startTime: '',
-    endTime: '',
-  });
+export default function TeacherExamsPage() {
+  const [classes, setClasses] = useState<string[]>([]);
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [selectedClass, setSelectedClass] = useState("");
+  const [students, setStudents] = useState<Student[]>([]);
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [examForm, setExamForm] = useState(EMPTY_EXAM);
+  const [markForm, setMarkForm] = useState(EMPTY_MARK);
+  const [examModal, setExamModal] = useState(false);
+  const [marksModal, setMarksModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
-  useEffect(() => {
-    if (classId) {
-      fetchExams();
-    }
-  }, [classId]);
+  const loadProfile = useCallback(async () => { setLoading(true); setError(""); try { const profile = await getTeacherProfile(); setClasses(profile.assignedClassIds); setSubjects(profile.assignedSubjects); const firstClass = profile.assignedClassIds[0] || ""; const firstSubject = profile.assignedSubjects[0] || ""; setSelectedClass(firstClass); setExamForm((current) => ({ ...current, classId: firstClass, subject: firstSubject })); setMarkForm((current) => ({ ...current, subject: firstSubject })); } catch (unknownError: unknown) { setError(messageOf(unknownError, "Could not load your teacher assignments.")); } finally { setLoading(false); } }, []);
+  useEffect(() => { void loadProfile(); }, [loadProfile]);
+  useEffect(() => { if (!selectedClass) { setStudents([]); setExams([]); return; } let active = true; setLoading(true); setError(""); Promise.all([getTeacherClassStudents(selectedClass), getExamsByClass(selectedClass)]).then(([roster, records]) => { if (active) { setStudents(roster); setExams(records); setMarkForm({ ...EMPTY_MARK, studentId: roster[0]?.id || "", subject: subjects[0] || "" }); } }).catch((unknownError: unknown) => { if (active) setError(messageOf(unknownError, "Could not load this class.")); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [selectedClass, subjects]);
 
-  const fetchExams = async () => {
-    setLoading(true);
-    try {
-      const response = await axios.get(`${API_BASE_URL}/exams/class/${classId}`);
-      setExams(response.data);
-    } catch (error) {
-      console.error('Error fetching exams:', error);
-    }
-    setLoading(false);
-  };
+  const submitExam = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (new Date(examForm.startTime).getTime() <= Date.now()) { setError("Exam start time must be in the future."); return; } if (new Date(examForm.endTime) <= new Date(examForm.startTime)) { setError("Exam end time must be after its start time."); return; } if (examForm.passingMarks > examForm.totalMarks) { setError("Passing marks cannot exceed total marks."); return; } setSaving(true); setError(""); try { const created = await createExam({ ...examForm, startTime: examForm.startTime, endTime: examForm.endTime }); setExams((current) => [created, ...current]); setExamModal(false); setNotice("Exam draft created."); } catch (unknownError: unknown) { setError(messageOf(unknownError, "Could not create the exam.")); } finally { setSaving(false); } };
+  const publish = async (examId: string) => { setSaving(true); setError(""); try { const published = await publishExam(examId); setExams((current) => current.map((exam) => exam.id === published.id ? published : exam)); setNotice("Exam published to students."); } catch (unknownError: unknown) { setError(messageOf(unknownError, "Could not publish the exam.")); } finally { setSaving(false); } };
+  const submitMark = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (markForm.marks < 0 || markForm.marks > markForm.totalMarks) { setError("Marks must be between zero and total marks."); return; } setSaving(true); setError(""); try { await addMarks({ ...markForm, examId: markForm.examId || undefined }); setNotice("Marks recorded successfully."); setMarksModal(false); } catch (unknownError: unknown) { setError(messageOf(unknownError, "Could not record marks.")); } finally { setSaving(false); } };
 
-  const handleCreateExam = async () => {
-    try {
-      await axios.post(`${API_BASE_URL}/exams`, {
-        ...formData,
-        classId,
-      });
-      setFormData({
-        title: '',
-        description: '',
-        subject: '',
-        totalMarks: 0,
-        passingMarks: 0,
-        examType: 'MCQ',
-        startTime: '',
-        endTime: '',
-      });
-      setShowModal(false);
-      fetchExams();
-    } catch (error) {
-      console.error('Error creating exam:', error);
-    }
-  };
-
-  const handlePublishExam = async (examId) => {
-    try {
-      await axios.post(`${API_BASE_URL}/exams/${examId}/publish`);
-      fetchExams();
-    } catch (error) {
-      console.error('Error publishing exam:', error);
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'PUBLISHED':
-        return 'bg-blue-100 text-blue-800';
-      case 'DRAFT':
-        return 'bg-gray-100 text-gray-800';
-      case 'ONGOING':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'COMPLETED':
-        return 'bg-green-100 text-green-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Online Exams</h1>
-            <p className="text-gray-600 mt-2">Create and manage online exams</p>
-          </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-          >
-            Create Exam
-          </button>
-        </div>
-
-        {/* Class Selector */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Class
-          </label>
-          <input
-            type="text"
-            value={classId}
-            onChange={(e) => setClassId(e.target.value)}
-            placeholder="Enter class ID"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
-        </div>
-
-        {/* Exams Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {loading ? (
-            <div className="col-span-3 text-center text-gray-500 py-8">Loading...</div>
-          ) : exams.length === 0 ? (
-            <div className="col-span-3 text-center text-gray-500 py-8">No exams found</div>
-          ) : (
-            exams.map((exam) => (
-              <div key={exam.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">{exam.title}</h3>
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(exam.status)}`}>
-                    {exam.status}
-                  </span>
-                </div>
-                <p className="text-gray-600 text-sm mb-2">{exam.description}</p>
-                <div className="space-y-2 mb-4">
-                  <p className="text-sm text-gray-600">
-                    <strong>Subject:</strong> {exam.subject}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <strong>Type:</strong> {exam.examType}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <strong>Total Marks:</strong> {exam.totalMarks}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <strong>Passing Marks:</strong> {exam.passingMarks}
-                  </p>
-                </div>
-                {exam.status === 'DRAFT' && (
-                  <button
-                    onClick={() => handlePublishExam(exam.id)}
-                    className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                  >
-                    Publish Exam
-                  </button>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Modal */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-8 max-w-md w-full">
-              <h2 className="text-2xl font-bold mb-4">Create New Exam</h2>
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  placeholder="Exam Title"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <textarea
-                  placeholder="Description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <input
-                  type="text"
-                  placeholder="Subject"
-                  value={formData.subject}
-                  onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <select
-                  value={formData.examType}
-                  onChange={(e) => setFormData({ ...formData, examType: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  <option value="MCQ">MCQ</option>
-                  <option value="ESSAY">Essay</option>
-                  <option value="MIXED">Mixed</option>
-                </select>
-                <input
-                  type="number"
-                  placeholder="Total Marks"
-                  value={formData.totalMarks}
-                  onChange={(e) => setFormData({ ...formData, totalMarks: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <input
-                  type="number"
-                  placeholder="Passing Marks"
-                  value={formData.passingMarks}
-                  onChange={(e) => setFormData({ ...formData, passingMarks: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <div className="flex gap-4">
-                  <button
-                    onClick={handleCreateExam}
-                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                  >
-                    Create
-                  </button>
-                  <button
-                    onClick={() => setShowModal(false)}
-                    className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  return <div className="mx-auto max-w-6xl space-y-7"><header className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h1 className="flex items-center gap-3 text-3xl font-black"><FileText className="h-8 w-8 text-blue-600" />Exams and marks</h1><p className="mt-1 text-slate-500">Manage exams and results only for your assigned classes and subjects.</p></div><div className="flex gap-3"><button type="button" disabled={!classes.length || !subjects.length} onClick={() => { setError(""); setMarksModal(true); }} className="flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-3 text-sm font-bold text-blue-700 disabled:opacity-50 dark:border-blue-900 dark:text-blue-300"><Award className="h-4 w-4" />Record marks</button><button type="button" disabled={!classes.length || !subjects.length} onClick={() => { setError(""); setExamModal(true); }} className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50"><FilePlus2 className="h-4 w-4" />Create exam</button></div></header>{notice && <InlineNotice message={notice} />}{error && !examModal && !marksModal && <InlineNotice message={error} tone="error" />}<label className="grid max-w-md gap-1 text-sm font-semibold">Assigned class<select value={selectedClass} onChange={(event) => { setSelectedClass(event.target.value); setExamForm((current) => ({ ...current, classId: event.target.value })); }} className="field">{classes.map((classId) => <option key={classId}>{classId}</option>)}</select></label>{loading ? <LoadingState label="Loading class exams…" /> : error && !exams.length ? <ErrorState message={error} onRetry={() => void loadProfile()} /> : !classes.length ? <EmptyState title="No assigned classes" message="Ask an administrator to configure your teacher profile." /> : exams.length === 0 ? <EmptyState title="No exams for this class" message="Create the first exam draft for this class." /> : <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{exams.map((exam) => <article key={exam.id} className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"><div className="flex justify-between gap-3"><div><p className="text-xs font-bold uppercase text-blue-600">{exam.subject}</p><h2 className="mt-1 text-xl font-black">{exam.title}</h2></div><span className="h-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-bold dark:bg-slate-800">{exam.status}</span></div><p className="mt-3 text-sm text-slate-500">{exam.description || "No description."}</p><p className="mt-4 text-xs text-slate-500">{formatDate(exam.startTime)} · {exam.totalMarks} marks</p>{exam.status === "DRAFT" && <button type="button" disabled={saving} onClick={() => void publish(exam.id)} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"><Send className="h-4 w-4" />Publish</button>}</article>)}</div>}
+    {examModal && <Modal title="Create exam" close={() => setExamModal(false)}><form onSubmit={submitExam} className="space-y-4"><Field label="Title"><input required minLength={3} value={examForm.title} onChange={(event) => setExamForm({ ...examForm, title: event.target.value })} className="field" /></Field><Field label="Description"><textarea rows={3} value={examForm.description} onChange={(event) => setExamForm({ ...examForm, description: event.target.value })} className="field" /></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="Assigned class"><select value={examForm.classId} onChange={(event) => setExamForm({ ...examForm, classId: event.target.value })} className="field">{classes.map((item) => <option key={item}>{item}</option>)}</select></Field><Field label="Assigned subject"><select value={examForm.subject} onChange={(event) => setExamForm({ ...examForm, subject: event.target.value })} className="field">{subjects.map((item) => <option key={item}>{item}</option>)}</select></Field></div><div className="grid gap-4 sm:grid-cols-2"><Field label="Starts"><input required type="datetime-local" value={examForm.startTime} onChange={(event) => setExamForm({ ...examForm, startTime: event.target.value })} className="field" /></Field><Field label="Ends"><input required type="datetime-local" value={examForm.endTime} onChange={(event) => setExamForm({ ...examForm, endTime: event.target.value })} className="field" /></Field></div><div className="grid gap-4 sm:grid-cols-3"><Field label="Total"><input required type="number" min={1} value={examForm.totalMarks} onChange={(event) => setExamForm({ ...examForm, totalMarks: Number(event.target.value) })} className="field" /></Field><Field label="Pass"><input required type="number" min={0} value={examForm.passingMarks} onChange={(event) => setExamForm({ ...examForm, passingMarks: Number(event.target.value) })} className="field" /></Field><Field label="Type"><select value={examForm.examType} onChange={(event) => setExamForm({ ...examForm, examType: event.target.value })} className="field"><option>MCQ</option><option>ESSAY</option><option>MIXED</option></select></Field></div>{error && <InlineNotice message={error} tone="error" />}<button disabled={saving} className="primary-button">{saving ? "Creating…" : "Create draft"}</button></form></Modal>}
+    {marksModal && <Modal title="Record marks" close={() => setMarksModal(false)}><form onSubmit={submitMark} className="space-y-4"><Field label="Student"><select required value={markForm.studentId} onChange={(event) => setMarkForm({ ...markForm, studentId: event.target.value })} className="field"><option value="">Select a student</option>{students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select></Field><Field label="Assigned subject"><select value={markForm.subject} onChange={(event) => setMarkForm({ ...markForm, subject: event.target.value })} className="field">{subjects.map((subject) => <option key={subject}>{subject}</option>)}</select></Field><Field label="Exam (optional)"><select value={markForm.examId} onChange={(event) => { const exam = exams.find((item) => item.id === event.target.value); setMarkForm({ ...markForm, examId: event.target.value, totalMarks: exam?.totalMarks || markForm.totalMarks, subject: exam?.subject || markForm.subject }); }} className="field"><option value="">General assessment</option>{exams.map((exam) => <option key={exam.id} value={exam.id}>{exam.title}</option>)}</select></Field><div className="grid grid-cols-2 gap-4"><Field label="Marks"><input required type="number" min={0} max={markForm.totalMarks} value={markForm.marks} onChange={(event) => setMarkForm({ ...markForm, marks: Number(event.target.value) })} className="field" /></Field><Field label="Total marks"><input required type="number" min={1} value={markForm.totalMarks} onChange={(event) => setMarkForm({ ...markForm, totalMarks: Number(event.target.value) })} className="field" /></Field></div>{error && <InlineNotice message={error} tone="error" />}<button disabled={saving || !students.length} className="primary-button">{saving ? "Saving…" : "Save marks"}</button></form></Modal>}
+  </div>;
 }
+
+function Modal({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) { return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true"><div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-7 dark:bg-slate-900"><div className="mb-5 flex justify-between"><h2 className="text-xl font-black">{title}</h2><button type="button" onClick={close} aria-label="Close"><X className="h-5 w-5" /></button></div>{children}</div></div>; }
+function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="grid gap-1 text-sm font-semibold">{label}{children}</label>; }
+function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); }
+function messageOf(error: unknown, fallback: string) { return error instanceof Error ? error.message : fallback; }

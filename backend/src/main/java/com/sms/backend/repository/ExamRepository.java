@@ -10,6 +10,8 @@ import java.util.List;
 public interface ExamRepository extends MongoRepository<Exam, String> {
     List<Exam> findByClassId(String classId);
 
+    List<Exam> findByClassIdAndStatus(String classId, String status);
+
     List<Exam> findBySubject(String subject);
 
     List<Exam> findByStatus(String status);

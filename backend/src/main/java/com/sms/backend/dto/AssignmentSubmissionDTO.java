@@ -2,11 +2,17 @@ package com.sms.backend.dto;
 
 import java.time.LocalDateTime;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
 public class AssignmentSubmissionDTO {
     private String id;
+    @NotBlank @Size(max = 100)
     private String assignmentId;
     private String studentId;
+    @Size(max = 500)
     private String submissionFileUrl;
+    @Size(max = 10000)
     private String submissionText;
     private LocalDateTime submittedAt;
     private String status;

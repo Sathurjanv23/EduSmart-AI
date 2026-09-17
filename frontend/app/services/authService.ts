@@ -1,28 +1,40 @@
-const API_BASE = "http://localhost:8080/api/auth";
+import { apiRequest } from "./apiService";
+import { clearAuthToken, readAuthToken, writeAuthToken } from "./tokenStorage";
 
-// helper function
-async function parseJsonSafely(response: Response) {
-  const text = await response.text();
-  try {
-    return text ? JSON.parse(text) : {};
-  } catch {
-    return {};
-  }
+const API_BASE = "/auth";
+
+export const AUTH_ROLES = ["ADMIN", "TEACHER", "STUDENT", "PARENT"] as const;
+export type Role = (typeof AUTH_ROLES)[number];
+
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  status?: string;
+  emailVerified?: boolean;
+  profileId?: string;
+  studentId?: string;
+  teacherId?: string;
+  parentId?: string;
+}
+
+export interface AuthResponse {
+  message?: string;
+  token?: string;
+  user?: AuthUser;
+  email?: string;
 }
 
 // LOGIN (Step 1 — returns {message:"OTP_SENT"} if password ok)
-export async function loginUser(loginData: { email: string; password: string }) {
-  const response = await fetch(`${API_BASE}/login`, {
+export async function loginUser(loginData: { email: string; password: string }): Promise<AuthResponse> {
+  return apiRequest<AuthResponse>(`${API_BASE}/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email: loginData.email.toLowerCase().trim(),
-      password: loginData.password.trim(),
+      password: loginData.password,
     }),
   });
-  const data = await parseJsonSafely(response);
-  if (!response.ok) throw new Error(data.message || "Login failed");
-  return data;
 }
 
 // SIGNUP (creates PENDING account, triggers OTP to email)
@@ -32,19 +44,18 @@ export async function signupUser(signupData: {
   password: string;
   role: string;
 }) {
-  const response = await fetch(`${API_BASE}/signup`, {
+  if (signupData.role !== "STUDENT" && signupData.role !== "PARENT") {
+    throw new Error("Public registration is only available to students and parents.");
+  }
+  return apiRequest<AuthResponse>(`${API_BASE}/signup`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: signupData.name.trim(),
       email: signupData.email.toLowerCase().trim(),
-      password: signupData.password.trim(),
+      password: signupData.password,
       role: signupData.role.toUpperCase().trim(),
     }),
   });
-  const data = await parseJsonSafely(response);
-  if (!response.ok) throw new Error(data.message || "Signup failed");
-  return data;
 }
 
 // VERIFY OTP (REGISTER or LOGIN_2FA) → returns JWT on success
@@ -53,14 +64,11 @@ export async function verifyOtp(payload: {
   otp: string;
   purpose: "REGISTER" | "LOGIN_2FA";
 }) {
-  const response = await fetch(`${API_BASE}/verify-otp`, {
+  return apiRequest<AuthResponse>(`${API_BASE}/verify-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, email: payload.email.toLowerCase().trim(), otp: payload.otp.trim() }),
   });
-  const data = await parseJsonSafely(response);
-  if (!response.ok) throw new Error(data.message || "OTP verification failed");
-  return data;
 }
 
 // RESEND OTP
@@ -68,26 +76,20 @@ export async function resendOtp(payload: {
   email: string;
   purpose: "REGISTER" | "LOGIN_2FA";
 }) {
-  const response = await fetch(`${API_BASE}/resend-otp`, {
+  return apiRequest<AuthResponse>(`${API_BASE}/resend-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, email: payload.email.toLowerCase().trim() }),
   });
-  const data = await parseJsonSafely(response);
-  if (!response.ok) throw new Error(data.message || "Resend failed");
-  return data;
 }
 
 // FORGOT PASSWORD
 export async function forgotPassword(email: string) {
-  const response = await fetch(`${API_BASE}/forgot-password`, {
+  return apiRequest<AuthResponse>(`${API_BASE}/forgot-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: email.toLowerCase().trim() }),
   });
-  const data = await parseJsonSafely(response);
-  if (!response.ok) throw new Error(data.message || "Forgot password failed");
-  return data;
 }
 
 // RESET PASSWORD
@@ -95,37 +97,32 @@ export async function resetPassword(resetData: {
   token: string;
   newPassword: string;
 }) {
-  const response = await fetch(`${API_BASE}/reset-password`, {
+  return apiRequest<AuthResponse>(`${API_BASE}/reset-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       token: resetData.token.trim(),
-      newPassword: resetData.newPassword.trim(),
+      newPassword: resetData.newPassword,
     }),
   });
-  const data = await parseJsonSafely(response);
-  return data;
 }
 
 // SESSION MANAGEMENT
 export function saveToken(token: string) {
-  if (typeof window !== "undefined") {
-    localStorage.setItem("auth-token", token);
-  }
+  if (!token) throw new Error("The server did not return a session token.");
+  writeAuthToken(token);
 }
 
 export function getToken() {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("auth-token");
-  }
-  return null;
+  return readAuthToken();
 }
 
 export function logout() {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("auth-token");
-    localStorage.removeItem("auth-user");
-    localStorage.removeItem("demo-role");
-    window.location.href = "/login";
-  }
+  clearAuthToken();
+  if (typeof window !== "undefined") window.location.assign("/login");
+}
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  const response = await apiRequest<AuthUser | { user: AuthUser }>(`${API_BASE}/me`);
+  return "user" in response ? response.user : response;
 }

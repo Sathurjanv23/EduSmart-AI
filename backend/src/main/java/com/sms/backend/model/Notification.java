@@ -1,10 +1,17 @@
 package com.sms.backend.model;
 
+import java.util.HashSet;
+import java.util.Set;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.LocalDateTime;
 
 @Document(collection = "notifications")
+@CompoundIndex(name = "notification_user_created", def = "{'userId': 1, 'createdAt': -1}")
 public class Notification {
 
     @Id
@@ -12,8 +19,12 @@ public class Notification {
     private String title;
     private String message;
     private String type; // info, success, warning, error
+    @Indexed
     private String userId; // Optional: null for global notifications
     private boolean read;
+    @JsonIgnore
+    private Set<String> readByUserIds = new HashSet<>();
+    @Indexed
     private LocalDateTime createdAt;
 
     public Notification() {
@@ -42,6 +53,19 @@ public class Notification {
     public void setUserId(String userId) { this.userId = userId; }
     public boolean isRead() { return read; }
     public void setRead(boolean read) { this.read = read; }
+    public Set<String> getReadByUserIds() { return readByUserIds; }
+    public void setReadByUserIds(Set<String> readByUserIds) {
+        this.readByUserIds = readByUserIds == null ? new HashSet<>() : readByUserIds;
+    }
+    public boolean isReadBy(String userId) {
+        return readByUserIds != null && readByUserIds.contains(userId);
+    }
+    public void markReadBy(String userId) {
+        if (readByUserIds == null) {
+            readByUserIds = new HashSet<>();
+        }
+        readByUserIds.add(userId);
+    }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

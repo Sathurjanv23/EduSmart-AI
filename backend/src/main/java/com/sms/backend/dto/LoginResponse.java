@@ -1,17 +1,15 @@
 package com.sms.backend.dto;
 
-import com.sms.backend.model.User;
-
 public class LoginResponse {
 
     private String message;
     private String token;
-    private User user;
+    private AuthenticatedUserResponse user;
 
     public LoginResponse() {
     }
 
-    public LoginResponse(String message, String token, User user) {
+    public LoginResponse(String message, String token, AuthenticatedUserResponse user) {
         this.message = message;
         this.token = token;
         this.user = user;
@@ -33,11 +31,11 @@ public class LoginResponse {
         this.token = token;
     }
 
-    public User getUser() {
+    public AuthenticatedUserResponse getUser() {
         return user;
     }
 
-    public void setUser(User user) {
+    public void setUser(AuthenticatedUserResponse user) {
         this.user = user;
     }
 }

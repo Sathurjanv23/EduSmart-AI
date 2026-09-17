@@ -2,7 +2,6 @@ package com.sms.backend.controller;
 
 import com.sms.backend.model.Timetable;
 import com.sms.backend.service.TimetableService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -10,11 +9,13 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/timetables")
-@CrossOrigin(origins = "*")
 public class TimetableController {
 
-    @Autowired
-    private TimetableService timetableService;
+    private final TimetableService timetableService;
+
+    public TimetableController(TimetableService timetableService) {
+        this.timetableService = timetableService;
+    }
 
     @PostMapping
     public ResponseEntity<Timetable> createTimetable(@RequestBody Timetable timetable) {

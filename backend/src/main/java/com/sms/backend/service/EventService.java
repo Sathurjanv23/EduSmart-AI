@@ -2,25 +2,27 @@ package com.sms.backend.service;
 
 import com.sms.backend.model.Event;
 import com.sms.backend.repository.EventRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.sms.backend.exception.ApiException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 public class EventService {
 
-    @Autowired
-    private EventRepository eventRepository;
+    private final EventRepository eventRepository;
+
+    public EventService(EventRepository eventRepository) {
+        this.eventRepository = eventRepository;
+    }
 
     public Event createEvent(Event event) {
         return eventRepository.save(event);
     }
 
     public Event getEventById(String id) {
-        return eventRepository.findById(id).orElse(null);
+        return requireById(id);
     }
 
     public List<Event> getAllEvents() {
@@ -44,19 +46,19 @@ public class EventService {
     }
 
     public Event updateEvent(String id, Event event) {
-        Optional<Event> optional = eventRepository.findById(id);
-        if (optional.isPresent()) {
-            Event existing = optional.get();
-            existing.setTitle(event.getTitle());
-            existing.setDescription(event.getDescription());
-            existing.setEventType(event.getEventType());
-            existing.setEventDate(event.getEventDate());
-            return eventRepository.save(existing);
-        }
-        return null;
+        Event existing = requireById(id);
+        existing.setTitle(event.getTitle());
+        existing.setDescription(event.getDescription());
+        existing.setEventType(event.getEventType());
+        existing.setEventDate(event.getEventDate());
+        return eventRepository.save(existing);
     }
 
     public void deleteEvent(String id) {
-        eventRepository.deleteById(id);
+        eventRepository.delete(requireById(id));
+    }
+
+    private Event requireById(String id) {
+        return eventRepository.findById(id).orElseThrow(() -> ApiException.notFound("Event"));
     }
 }

@@ -1,23 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, ArrowLeft, CheckCircle2, RefreshCw, School, Shield } from 'lucide-react';
+import { Lock, ArrowLeft, CheckCircle2, RefreshCw, Shield } from 'lucide-react';
 import { resetPassword as resetPasswordApi } from "../services/authService";
 
 export default function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const token = searchParams.get("token");
+  const [token] = useState(() => searchParams.get("token"));
 
   const [newPassword, setNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
+  useEffect(() => {
+    if (!token) return;
+    const safeUrl = new URL(window.location.href);
+    safeUrl.searchParams.delete("token");
+    window.history.replaceState(window.history.state, "", `${safeUrl.pathname}${safeUrl.search}${safeUrl.hash}`);
+  }, [token]);
+
   const validatePassword = (value: string) => {
-    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&.#_-]).{8,}$/.test(value);
+    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&.#_-]).{8,128}$/.test(value);
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -36,11 +43,11 @@ export default function ResetPasswordContent() {
 
     setLoading(true);
     try {
-      await resetPasswordApi({ token, newPassword: newPassword.trim() });
+      await resetPasswordApi({ token, newPassword });
       setSuccess(true);
       setTimeout(() => router.push("/login"), 3000);
-    } catch (err: any) {
-      setError(err.message || "Failed to reset password. Try again.");
+    } catch (unknownError: unknown) {
+      setError(unknownError instanceof Error ? unknownError.message : "Failed to reset password. Try again.");
     } finally {
       setLoading(false);
     }
@@ -68,7 +75,7 @@ export default function ResetPasswordContent() {
               <Shield className="w-8 h-8" />
             </div>
             <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">New Password</h1>
-            <p className="text-xs font-bold text-slate-500 mt-2 uppercase tracking-widest">Anti-Gravity Security</p>
+            <p className="text-xs font-bold text-slate-500 mt-2 uppercase tracking-widest">CampusCore Security</p>
           </div>
 
           <AnimatePresence mode="wait">
@@ -88,6 +95,8 @@ export default function ResetPasswordContent() {
                     <input
                       type="password"
                       required
+                      minLength={8}
+                      maxLength={128}
                       placeholder="••••••••"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}

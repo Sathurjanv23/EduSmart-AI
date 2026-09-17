@@ -2,24 +2,26 @@ package com.sms.backend.service;
 
 import com.sms.backend.model.Book;
 import com.sms.backend.repository.BookRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.sms.backend.exception.ApiException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Optional;
 
 @Service
 public class BookService {
 
-    @Autowired
-    private BookRepository bookRepository;
+    private final BookRepository bookRepository;
+
+    public BookService(BookRepository bookRepository) {
+        this.bookRepository = bookRepository;
+    }
 
     public Book addBook(Book book) {
         return bookRepository.save(book);
     }
 
     public Book getBookById(String id) {
-        return bookRepository.findById(id).orElse(null);
+        return requireById(id);
     }
 
     public List<Book> getAllBooks() {
@@ -35,7 +37,11 @@ public class BookService {
     }
 
     public Book getBookByIsbn(String isbn) {
-        return bookRepository.findByIsbn(isbn);
+        Book book = bookRepository.findByIsbn(isbn);
+        if (book == null) {
+            throw ApiException.notFound("Book");
+        }
+        return book;
     }
 
     public List<Book> searchBooks(String keyword) {
@@ -47,19 +53,19 @@ public class BookService {
     }
 
     public Book updateBook(String id, Book book) {
-        Optional<Book> optional = bookRepository.findById(id);
-        if (optional.isPresent()) {
-            Book existing = optional.get();
-            existing.setTitle(book.getTitle());
-            existing.setAuthor(book.getAuthor());
-            existing.setCategory(book.getCategory());
-            existing.setAvailableCopies(book.getAvailableCopies());
-            return bookRepository.save(existing);
-        }
-        return null;
+        Book existing = requireById(id);
+        existing.setTitle(book.getTitle());
+        existing.setAuthor(book.getAuthor());
+        existing.setCategory(book.getCategory());
+        existing.setAvailableCopies(book.getAvailableCopies());
+        return bookRepository.save(existing);
     }
 
     public void deleteBook(String id) {
-        bookRepository.deleteById(id);
+        bookRepository.delete(requireById(id));
+    }
+
+    private Book requireById(String id) {
+        return bookRepository.findById(id).orElseThrow(() -> ApiException.notFound("Book"));
     }
 }

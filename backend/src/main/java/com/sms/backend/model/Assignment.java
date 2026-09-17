@@ -2,6 +2,7 @@ package com.sms.backend.model;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.index.Indexed;
 import java.time.LocalDateTime;
 
 @Document(collection = "assignments")
@@ -10,15 +11,19 @@ public class Assignment {
     private String id;
     private String title;
     private String description;
+    @Indexed
     private String classId;
+    @Indexed
     private String subject;
-    private String createdBy; // Teacher ID
+    @Indexed
+    private String createdBy;
     private LocalDateTime dueDate;
     private Integer maxMarks;
     private String fileUrl;
     private String attachmentUrl;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    @Indexed
     private String status; // ACTIVE, CLOSED, ARCHIVED
 
     public Assignment() {

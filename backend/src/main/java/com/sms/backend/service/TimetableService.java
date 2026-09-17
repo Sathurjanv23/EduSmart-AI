@@ -2,17 +2,19 @@ package com.sms.backend.service;
 
 import com.sms.backend.model.Timetable;
 import com.sms.backend.repository.TimetableRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.sms.backend.exception.ApiException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Optional;
 
 @Service
 public class TimetableService {
 
-    @Autowired
-    private TimetableRepository timetableRepository;
+    private final TimetableRepository timetableRepository;
+
+    public TimetableService(TimetableRepository timetableRepository) {
+        this.timetableRepository = timetableRepository;
+    }
 
     public Timetable createTimetable(Timetable timetable) {
         timetable.setStatus("DRAFT");
@@ -20,19 +22,15 @@ public class TimetableService {
     }
 
     public Timetable updateTimetable(String id, Timetable timetable) {
-        Optional<Timetable> optional = timetableRepository.findById(id);
-        if (optional.isPresent()) {
-            Timetable existing = optional.get();
-            existing.setDay(timetable.getDay());
-            existing.setPeriods(timetable.getPeriods());
-            existing.setStatus(timetable.getStatus());
-            return timetableRepository.save(existing);
-        }
-        return null;
+        Timetable existing = requireById(id);
+        existing.setDay(timetable.getDay());
+        existing.setPeriods(timetable.getPeriods());
+        existing.setStatus(timetable.getStatus());
+        return timetableRepository.save(existing);
     }
 
     public Timetable getTimetableById(String id) {
-        return timetableRepository.findById(id).orElse(null);
+        return requireById(id);
     }
 
     public List<Timetable> getTimetablesByClass(String classId) {
@@ -44,24 +42,28 @@ public class TimetableService {
     }
 
     public Timetable getTimetableByClassAndDay(String classId, String day) {
-        return timetableRepository.findByClassIdAndDay(classId, day);
+        Timetable timetable = timetableRepository.findByClassIdAndDay(classId, day);
+        if (timetable == null) {
+            throw ApiException.notFound("Timetable");
+        }
+        return timetable;
     }
 
     public Timetable publishTimetable(String id) {
-        Optional<Timetable> optional = timetableRepository.findById(id);
-        if (optional.isPresent()) {
-            Timetable timetable = optional.get();
-            timetable.setStatus("ACTIVE");
-            return timetableRepository.save(timetable);
-        }
-        return null;
+        Timetable timetable = requireById(id);
+        timetable.setStatus("ACTIVE");
+        return timetableRepository.save(timetable);
     }
 
     public void deleteTimetable(String id) {
-        timetableRepository.deleteById(id);
+        timetableRepository.delete(requireById(id));
     }
 
     public List<Timetable> getTimetablesByAcademicYear(String classId, String year) {
         return timetableRepository.findByClassIdAndAcademicYear(classId, year);
+    }
+
+    private Timetable requireById(String id) {
+        return timetableRepository.findById(id).orElseThrow(() -> ApiException.notFound("Timetable"));
     }
 }

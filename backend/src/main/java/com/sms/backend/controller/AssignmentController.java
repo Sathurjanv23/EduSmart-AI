@@ -1,57 +1,112 @@
 package com.sms.backend.controller;
 
-import com.sms.backend.model.Assignment;
-import com.sms.backend.dto.AssignmentDTO;
-import com.sms.backend.service.AssignmentService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
+import java.net.URI;
 import java.util.List;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.sms.backend.dto.AssignmentDTO;
+import com.sms.backend.model.Assignment;
+import com.sms.backend.model.Student;
+import com.sms.backend.security.AcademicAccessService;
+import com.sms.backend.service.AssignmentService;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/assignments")
-@CrossOrigin(origins = "*")
 public class AssignmentController {
+    private final AssignmentService assignmentService;
+    private final AcademicAccessService accessService;
 
-    @Autowired
-    private AssignmentService assignmentService;
+    public AssignmentController(AssignmentService assignmentService, AcademicAccessService accessService) {
+        this.assignmentService = assignmentService;
+        this.accessService = accessService;
+    }
 
     @PostMapping
     public ResponseEntity<Assignment> createAssignment(
-            @RequestBody AssignmentDTO dto,
-            @RequestParam String teacherId) {
-        return ResponseEntity.ok(assignmentService.createAssignment(dto, teacherId));
+            @Valid @RequestBody AssignmentDTO dto,
+            Authentication authentication) {
+        accessService.requireTeacherClass(authentication, dto.getClassId());
+        accessService.requireTeacherSubject(authentication, dto.getSubject());
+        Assignment assignment = assignmentService.createAssignment(dto, authentication.getName());
+        return ResponseEntity.created(URI.create("/api/assignments/" + assignment.getId())).body(assignment);
+    }
+
+    @GetMapping
+    public List<Assignment> getAssignments(Authentication authentication) {
+        return assignmentService.getVisibleAssignments(authentication);
+    }
+
+    @GetMapping("/available")
+    public List<Assignment> getAvailableAssignments(Authentication authentication) {
+        Student student = accessService.currentStudent(authentication);
+        return assignmentService.getAvailableForStudent(student);
+    }
+
+    @GetMapping("/student/{studentId}")
+    public List<Assignment> getAssignmentsForStudent(
+            @PathVariable String studentId,
+            Authentication authentication) {
+        Student student = accessService.requireStudentAccess(authentication, studentId);
+        return assignmentService.getAvailableForStudent(student);
     }
 
     @GetMapping("/class/{classId}")
-    public ResponseEntity<List<Assignment>> getAssignmentsByClass(@PathVariable String classId) {
-        return ResponseEntity.ok(assignmentService.getAssignmentsByClass(classId));
-    }
-
-    @GetMapping("/subject/{subject}")
-    public ResponseEntity<List<Assignment>> getAssignmentsBySubject(@PathVariable String subject) {
-        return ResponseEntity.ok(assignmentService.getAssignmentsBySubject(subject));
+    public List<Assignment> getAssignmentsByClass(
+            @PathVariable String classId,
+            Authentication authentication) {
+        accessService.requireClassReadAccess(authentication, classId);
+        if (accessService.hasAuthority(authentication, "ADMIN")) {
+            return assignmentService.getAssignmentsByClass(classId);
+        }
+        return assignmentService.getVisibleAssignments(authentication).stream()
+                .filter(assignment -> classId.equals(assignment.getClassId()))
+                .toList();
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Assignment> getAssignmentById(@PathVariable String id) {
-        return ResponseEntity.ok(assignmentService.getAssignmentById(id));
+    public Assignment getAssignmentById(@PathVariable String id, Authentication authentication) {
+        Assignment assignment = assignmentService.requireById(id);
+        accessService.requireClassReadAccess(authentication, assignment.getClassId());
+        if (accessService.hasAuthority(authentication, "TEACHER")) {
+            accessService.requireTeacherSubject(authentication, assignment.getSubject());
+        } else if (!accessService.hasAuthority(authentication, "ADMIN")
+                && !"ACTIVE".equals(assignment.getStatus())) {
+            throw com.sms.backend.exception.ApiException.notFound("Assignment");
+        }
+        return assignment;
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Assignment> updateAssignment(@PathVariable String id, @RequestBody AssignmentDTO dto) {
-        return ResponseEntity.ok(assignmentService.updateAssignment(id, dto));
+    public Assignment updateAssignment(
+            @PathVariable String id,
+            @Valid @RequestBody AssignmentDTO dto,
+            Authentication authentication) {
+        Assignment existing = assignmentService.requireById(id);
+        accessService.requireTeacherClass(authentication, existing.getClassId());
+        accessService.requireTeacherSubject(authentication, existing.getSubject());
+        accessService.requireTeacherClass(authentication, dto.getClassId());
+        accessService.requireTeacherSubject(authentication, dto.getSubject());
+        return assignmentService.updateAssignment(id, dto);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteAssignment(@PathVariable String id) {
+    public ResponseEntity<Void> deleteAssignment(@PathVariable String id, Authentication authentication) {
+        Assignment existing = assignmentService.requireById(id);
+        accessService.requireTeacherClass(authentication, existing.getClassId());
+        accessService.requireTeacherSubject(authentication, existing.getSubject());
         assignmentService.deleteAssignment(id);
-        return ResponseEntity.ok("Assignment deleted successfully");
-    }
-
-    @GetMapping("/teacher/{teacherId}")
-    public ResponseEntity<List<Assignment>> getAssignmentsByTeacher(@PathVariable String teacherId) {
-        return ResponseEntity.ok(assignmentService.getAssignmentsByTeacher(teacherId));
+        return ResponseEntity.noContent().build();
     }
 }

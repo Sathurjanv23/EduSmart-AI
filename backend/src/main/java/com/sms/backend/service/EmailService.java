@@ -2,78 +2,77 @@ package com.sms.backend.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import com.sms.backend.exception.ApiException;
+
+import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 
 @Service
 public class EmailService {
-
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
 
-    @Autowired
-    private JavaMailSender mailSender;
+    private final JavaMailSender mailSender;
+    private final String senderAddress;
 
-    /**
-     * Send registration OTP
-     */
-    public void sendRegistrationOtp(String toEmail, String otp) {
-        String subject = "Verify Your Account — EduSmart";
-        String content = "Welcome to EduSmart!<br><br>Your registration OTP code is: <b style='font-size: 24px; color: #10b981;'>" + otp + "</b><br><br>This code is valid for 1 minute.";
-        sendHtmlEmail(toEmail, subject, "Registration OTP", content);
+    public EmailService(
+            JavaMailSender mailSender,
+            @Value("${app.mail.from:no-reply@campuscore.local}") String senderAddress) {
+        this.mailSender = mailSender;
+        this.senderAddress = senderAddress;
     }
 
-    /**
-     * Send login 2FA OTP
-     */
-    public void sendLoginOtp(String toEmail, String otp) {
-        String subject = "Login 2FA OTP — EduSmart";
-        String content = "Your login security code is: <b style='font-size: 24px; color: #3b82f6;'>" + otp + "</b><br><br>This code is valid for 1 minute.";
-        sendHtmlEmail(toEmail, subject, "Login Verification", content);
+    public void sendRegistrationOtp(String toEmail, String otp, long expirySeconds) {
+        sendHtmlEmail(
+                toEmail,
+                "Verify your CampusCore account",
+                "Registration verification",
+                "Your verification code is <strong>" + otp + "</strong>. It expires in "
+                        + expirySeconds + " seconds.");
     }
 
-    /**
-     * Send password reset link
-     */
-    public void sendPasswordResetLink(String toEmail, String resetLink) {
-        String subject = "Reset Your Password — EduSmart";
-        String content = "We received a request to reset your password. Click the button below to continue:<br><br>" +
-                         "<a href='" + resetLink + "' style='display: inline-block; padding: 12px 24px; background-color: #f43f5e; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;'>Reset Password</a>" +
-                         "<br><br>This link is valid for 15 minutes.";
-        sendHtmlEmail(toEmail, subject, "Password Reset", content);
+    public void sendLoginOtp(String toEmail, String otp, long expirySeconds) {
+        sendHtmlEmail(
+                toEmail,
+                "CampusCore login verification",
+                "Login verification",
+                "Your login code is <strong>" + otp + "</strong>. It expires in "
+                        + expirySeconds + " seconds.");
+    }
+
+    public void sendPasswordResetLink(String toEmail, String resetLink, long expiryMinutes) {
+        sendHtmlEmail(
+                toEmail,
+                "Reset your CampusCore password",
+                "Password reset",
+                "Use this one-time link to reset your password: <a href=\"" + resetLink
+                        + "\">Reset password</a>. It expires in " + expiryMinutes + " minutes.");
     }
 
     private void sendHtmlEmail(String to, String subject, String title, String content) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            String htmlBody = "<html><body style='font-family: sans-serif; background-color: #f8fafc; padding: 20px;'>" +
-                    "<div style='max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05);'>" +
-                    "<div style='background: linear-gradient(135deg, #10b981, #059669); padding: 30px; text-align: center; color: white;'>" +
-                    "<h1 style='margin: 0; font-size: 28px;'>EduSmart</h1>" +
-                    "<p style='margin: 10px 0 0; opacity: 0.9;'>Modern School Management System</p>" +
-                    "</div>" +
-                    "<div style='padding: 40px; color: #334155; line-height: 1.6;'>" +
-                    "<h2 style='color: #1e293b; margin-top: 0;'>" + title + "</h2>" +
-                    content +
-                    "<br><br><hr style='border: none; border-top: 1px solid #f1f5f9;'>" +
-                    "<p style='font-size: 12px; color: #94a3b8; text-align: center; margin-top: 20px;'>" +
-                    "© 2026 EduSmart · Anti-Gravity Edition<br>This is an automated security email." +
-                    "</p></div></div></body></html>";
-
-            helper.setFrom("sathu20030303@gmail.com", "EduSmart System");
+            MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
+            helper.setFrom(senderAddress, "CampusCore");
             helper.setTo(to);
             helper.setSubject(subject);
-            helper.setText(htmlBody, true);
-
+            helper.setText("<html><body><h2>" + title + "</h2><p>" + content
+                    + "</p><p>If you did not request this, you can ignore this message.</p></body></html>", true);
             mailSender.send(message);
-            log.info("✅ Colorful HTML Email sent successfully to: {}", to);
-        } catch (Exception e) {
-            log.error("❌ Failed to send HTML email to: {}. Error: {}", to, e.getMessage());
+            log.info("Authentication email sent successfully");
+        } catch (MessagingException | MailException exception) {
+            log.error("Authentication email delivery failed: {}. Check MAIL_HOST, MAIL_PORT, MAIL_USERNAME and MAIL_PASSWORD/APP_PASSWORD.",
+                    exception.getClass().getSimpleName(), exception);
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "EMAIL_UNAVAILABLE",
+                    "Email delivery is temporarily unavailable. Check the SMTP configuration or use MailHog for local development.");
+        } catch (java.io.UnsupportedEncodingException exception) {
+            throw new IllegalStateException("Configured sender name is invalid", exception);
         }
     }
 }

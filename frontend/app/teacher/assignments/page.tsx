@@ -1,201 +1,68 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { ClipboardList, ClipboardPlus, NotebookPen, X } from "lucide-react";
+import { createAssignment, getAssignmentSubmissions, getAssignments, gradeSubmission } from "@/app/services/assignmentService";
+import { getTeacherProfile } from "@/app/services/teacherService";
+import { Assignment, AssignmentSubmission } from "@/app/types/api";
+import { EmptyState, ErrorState, InlineNotice, LoadingState } from "@/components/AsyncState";
+import { ProtectedFileButton } from "@/components/ProtectedFileButton";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+const EMPTY = { title: "", description: "", classId: "", subject: "", dueDate: "", maxMarks: 100 };
 
-export default function AssignmentsPage() {
-  const [assignments, setAssignments] = useState([]);
-  const [classId, setClassId] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    subject: '',
-    maxMarks: 0,
-    dueDate: '',
-  });
+export default function TeacherAssignmentsPage() {
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [classes, setClasses] = useState<string[]>([]);
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [form, setForm] = useState(EMPTY);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [reviewing, setReviewing] = useState<Assignment | null>(null);
+  const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
-  useEffect(() => {
-    if (classId) {
-      fetchAssignments();
-    }
-  }, [classId]);
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    try { const [items, profile] = await Promise.all([getAssignments(), getTeacherProfile()]); setAssignments(items); setClasses(profile.assignedClassIds); setSubjects(profile.assignedSubjects); setForm((current) => ({ ...current, classId: current.classId || profile.assignedClassIds[0] || "", subject: current.subject || profile.assignedSubjects[0] || "" })); }
+    catch (unknownError: unknown) { setError(messageOf(unknownError)); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
 
-  const fetchAssignments = async () => {
-    setLoading(true);
-    try {
-      const response = await axios.get(`${API_BASE_URL}/assignments/class/${classId}`);
-      setAssignments(response.data);
-    } catch (error) {
-      console.error('Error fetching assignments:', error);
-    }
-    setLoading(false);
+  const create = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setSaving(true); setError(""); setNotice("");
+    if (!form.dueDate || new Date(form.dueDate).getTime() <= Date.now()) { setError("The assignment due date must be in the future."); setSaving(false); return; }
+    try { const created = await createAssignment({ ...form, dueDate: form.dueDate }); setAssignments((current) => [created, ...current]); setForm({ ...EMPTY, classId: classes[0] || "", subject: subjects[0] || "" }); setModalOpen(false); setNotice("Assignment published successfully."); }
+    catch (unknownError: unknown) { setError(messageOf(unknownError, "Could not create the assignment.")); }
+    finally { setSaving(false); }
   };
 
-  const handleCreateAssignment = async () => {
-    try {
-      await axios.post(`${API_BASE_URL}/assignments`, {
-        ...formData,
-        classId,
-      }, {
-        params: { teacherId: 'current-teacher-id' },
-      });
-      setFormData({
-        title: '',
-        description: '',
-        subject: '',
-        maxMarks: 0,
-        dueDate: '',
-      });
-      setShowModal(false);
-      fetchAssignments();
-    } catch (error) {
-      console.error('Error creating assignment:', error);
-    }
+  const openReview = async (assignment: Assignment) => {
+    setReviewing(assignment); setReviewLoading(true); setError("");
+    try { setSubmissions(await getAssignmentSubmissions(assignment.id)); }
+    catch (unknownError: unknown) { setError(messageOf(unknownError, "Could not load submissions.")); }
+    finally { setReviewLoading(false); }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'ACTIVE':
-        return 'bg-blue-100 text-blue-800';
-      case 'CLOSED':
-        return 'bg-red-100 text-red-800';
-      case 'ARCHIVED':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
+  const saveGrade = async (submission: AssignmentSubmission, marksObtained: number, feedback: string) => {
+    if (!reviewing || marksObtained < 0 || marksObtained > reviewing.maxMarks) { setError(`Marks must be between 0 and ${reviewing?.maxMarks ?? 0}.`); return; }
+    setSaving(true); setError("");
+    try { const graded = await gradeSubmission(submission.id, { marks: marksObtained, feedback }); setSubmissions((current) => current.map((item) => item.id === graded.id ? graded : item)); setNotice("Submission grade saved."); }
+    catch (unknownError: unknown) { setError(messageOf(unknownError, "Could not save the grade.")); }
+    finally { setSaving(false); }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Assignments</h1>
-            <p className="text-gray-600 mt-2">Create and manage assignments</p>
-          </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-          >
-            Create Assignment
-          </button>
-        </div>
-
-        {/* Class Selector */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Class
-          </label>
-          <input
-            type="text"
-            value={classId}
-            onChange={(e) => setClassId(e.target.value)}
-            placeholder="Enter class ID"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-          />
-        </div>
-
-        {/* Assignments List */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center text-gray-500">Loading...</div>
-          ) : assignments.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">No assignments found</div>
-          ) : (
-            <table className="w-full">
-              <thead className="bg-gray-100 border-b">
-                <tr>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Title</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Subject</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Due Date</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Max Marks</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {assignments.map((assignment) => (
-                  <tr key={assignment.id} className="border-b hover:bg-gray-50">
-                    <td className="px-6 py-3 text-sm font-medium text-gray-900">{assignment.title}</td>
-                    <td className="px-6 py-3 text-sm text-gray-600">{assignment.subject}</td>
-                    <td className="px-6 py-3 text-sm text-gray-600">
-                      {new Date(assignment.dueDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-3 text-sm text-gray-600">{assignment.maxMarks}</td>
-                    <td className="px-6 py-3 text-sm">
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(assignment.status)}`}>
-                        {assignment.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Modal */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-8 max-w-md w-full">
-              <h2 className="text-2xl font-bold mb-4">Create New Assignment</h2>
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  placeholder="Assignment Title"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <textarea
-                  placeholder="Description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <input
-                  type="text"
-                  placeholder="Subject"
-                  value={formData.subject}
-                  onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <input
-                  type="number"
-                  placeholder="Max Marks"
-                  value={formData.maxMarks}
-                  onChange={(e) => setFormData({ ...formData, maxMarks: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <input
-                  type="datetime-local"
-                  value={formData.dueDate}
-                  onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <div className="flex gap-4">
-                  <button
-                    onClick={handleCreateAssignment}
-                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                  >
-                    Create
-                  </button>
-                  <button
-                    onClick={() => setShowModal(false)}
-                    className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  return <div className="mx-auto max-w-6xl space-y-7"><header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><h1 className="flex items-center gap-3 text-3xl font-black"><NotebookPen className="h-8 w-8 text-blue-600" />Assignments</h1><p className="mt-1 text-slate-500">Create work for assigned classes and grade real submissions.</p></div><button type="button" onClick={() => setModalOpen(true)} disabled={!classes.length} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50"><ClipboardPlus className="h-5 w-5" />Create assignment</button></header>{notice && <InlineNotice message={notice} />}{error && !modalOpen && <InlineNotice message={error} tone="error" />}{loading ? <LoadingState label="Loading assignments…" /> : error && assignments.length === 0 ? <ErrorState message={error} onRetry={() => void load()} /> : assignments.length === 0 ? <EmptyState title="No assignments" message={classes.length ? "Create the first assignment for an assigned class." : "An administrator must assign a class to your teacher profile first."} /> : <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{assignments.map((assignment) => <article key={assignment.id} className="rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase text-blue-600">{assignment.subject} · {assignment.classId}</p><h2 className="mt-1 text-xl font-black">{assignment.title}</h2></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold dark:bg-slate-800">{assignment.status}</span></div><p className="mt-3 text-sm text-slate-500">{assignment.description || "No description."}</p><p className="mt-5 text-xs text-slate-500">Due {formatDate(assignment.dueDate)} · {assignment.maxMarks} marks</p><button type="button" onClick={() => void openReview(assignment)} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 py-2.5 text-sm font-bold text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-300 dark:hover:bg-blue-950"><ClipboardList className="h-4 w-4" />Review submissions</button></article>)}</div>}
+    {modalOpen && <Modal title="Create assignment" close={() => setModalOpen(false)}><form onSubmit={create} className="space-y-4"><Field label="Title"><input required minLength={3} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} className="field" /></Field><Field label="Description"><textarea required rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} className="field" /></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="Assigned class"><select required value={form.classId} onChange={(event) => setForm({ ...form, classId: event.target.value })} className="field">{classes.map((classId) => <option key={classId}>{classId}</option>)}</select></Field><Field label="Assigned subject"><select required value={form.subject} onChange={(event) => setForm({ ...form, subject: event.target.value })} className="field">{subjects.map((subject) => <option key={subject}>{subject}</option>)}</select></Field></div><div className="grid gap-4 sm:grid-cols-2"><Field label="Due date"><input required type="datetime-local" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} className="field" /></Field><Field label="Maximum marks"><input required type="number" min={1} max={1000} value={form.maxMarks} onChange={(event) => setForm({ ...form, maxMarks: Number(event.target.value) })} className="field" /></Field></div>{error && <InlineNotice message={error} tone="error" />}<button disabled={saving} className="w-full rounded-xl bg-blue-600 py-3 font-bold text-white disabled:opacity-60">{saving ? "Creating…" : "Publish assignment"}</button></form></Modal>}
+    {reviewing && <Modal title={`Submissions · ${reviewing.title}`} close={() => { setReviewing(null); setSubmissions([]); }}>{reviewLoading ? <LoadingState label="Loading submissions…" /> : submissions.length === 0 ? <EmptyState title="No submissions" message="No student has submitted this assignment yet." /> : <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1">{submissions.map((submission) => <GradeForm key={submission.id} submission={submission} maxMarks={reviewing.maxMarks} saving={saving} onSave={saveGrade} />)}</div>}</Modal>}
+  </div>;
 }
+
+function GradeForm({ submission, maxMarks, saving, onSave }: { submission: AssignmentSubmission; maxMarks: number; saving: boolean; onSave: (submission: AssignmentSubmission, marks: number, feedback: string) => Promise<void> }) { const [marks, setMarks] = useState(submission.marksObtained ?? 0); const [feedback, setFeedback] = useState(submission.feedback || ""); return <form onSubmit={(event) => { event.preventDefault(); void onSave(submission, marks, feedback); }} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700"><div className="flex justify-between gap-3"><div><p className="font-mono text-xs text-slate-500">Student {submission.studentId}</p><p className="mt-1 text-sm">{submission.submissionText || "File submission"}</p>{submission.submissionFileUrl && <ProtectedFileButton fileUrl={submission.submissionFileUrl} />}</div><span className="text-xs font-bold">{submission.status}</span></div><div className="mt-4 grid gap-3 sm:grid-cols-[9rem_1fr_auto]"><label className="text-xs font-semibold">Marks / {maxMarks}<input type="number" min={0} max={maxMarks} value={marks} onChange={(event) => setMarks(Number(event.target.value))} className="field mt-1" /></label><label className="text-xs font-semibold">Feedback<input required value={feedback} onChange={(event) => setFeedback(event.target.value)} className="field mt-1" /></label><button disabled={saving} className="self-end rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">Save grade</button></div></form>; }
+function Modal({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) { return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true"><div className="w-full max-w-3xl rounded-3xl bg-white p-7 dark:bg-slate-900"><div className="mb-5 flex justify-between"><h2 className="text-xl font-black">{title}</h2><button type="button" onClick={close} aria-label="Close"><X className="h-5 w-5" /></button></div>{children}</div></div>; }
+function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="grid gap-1 text-sm font-semibold">{label}{children}</label>; }
+function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); }
+function messageOf(error: unknown, fallback = "Could not load assignments.") { return error instanceof Error ? error.message : fallback; }

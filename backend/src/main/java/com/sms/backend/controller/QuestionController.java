@@ -3,7 +3,6 @@ package com.sms.backend.controller;
 import com.sms.backend.model.Question;
 import com.sms.backend.dto.QuestionDTO;
 import com.sms.backend.service.QuestionService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -11,11 +10,13 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/questions")
-@CrossOrigin(origins = "*")
 public class QuestionController {
 
-    @Autowired
-    private QuestionService questionService;
+    private final QuestionService questionService;
+
+    public QuestionController(QuestionService questionService) {
+        this.questionService = questionService;
+    }
 
     @PostMapping
     public ResponseEntity<Question> createQuestion(@RequestBody QuestionDTO dto) {

@@ -4,18 +4,31 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.LocalDateTime;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.PositiveOrZero;
+
 @Document(collection = "fee_structures")
 public class FeeStructure {
     @Id
     private String id;
+    @NotBlank
     private String className;
+    @NotBlank
+    @Pattern(regexp = "^\\d{4}(-\\d{4})?$")
     private String academicYear;
+    @PositiveOrZero
     private Double tuitionFee;
+    @PositiveOrZero
     private Double labFee;
+    @PositiveOrZero
     private Double sportsFee;
+    @PositiveOrZero
     private Double transportFee;
+    @PositiveOrZero
     private Double otherFee;
     private Double totalFee;
+    @NotBlank
     private String dueDate;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

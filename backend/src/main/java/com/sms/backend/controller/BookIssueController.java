@@ -2,7 +2,6 @@ package com.sms.backend.controller;
 
 import com.sms.backend.model.BookIssue;
 import com.sms.backend.service.BookIssueService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -10,11 +9,13 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/library/issues")
-@CrossOrigin(origins = "*")
 public class BookIssueController {
 
-    @Autowired
-    private BookIssueService bookIssueService;
+    private final BookIssueService bookIssueService;
+
+    public BookIssueController(BookIssueService bookIssueService) {
+        this.bookIssueService = bookIssueService;
+    }
 
     @PostMapping
     public ResponseEntity<BookIssue> issueBook(@RequestBody BookIssue bookIssue) {

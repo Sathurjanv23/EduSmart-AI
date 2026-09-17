@@ -1,237 +1,41 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Bell, BookOpenCheck, CalendarCheck, Users } from "lucide-react";
+import { getAllAnnouncements } from "@/app/services/announcementService";
+import { getAssignmentsByStudent } from "@/app/services/assignmentService";
+import { getAttendanceByStudent } from "@/app/services/attendanceService";
+import { getMarksByStudent } from "@/app/services/marksService";
+import { getParentChildren } from "@/app/services/studentService";
+import { Announcement, Assignment, AttendanceRecord, MarkRecord, Student } from "@/app/types/api";
+import { EmptyState, ErrorState, LoadingState } from "@/components/AsyncState";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+type Tab = "attendance" | "marks" | "assignments" | "announcements";
 
 export default function ParentPortalPage() {
-  const [childrenData, setChildrenData] = useState([]);
-  const [selectedChild, setSelectedChild] = useState(null);
-  const [attendance, setAttendance] = useState([]);
-  const [marks, setMarks] = useState([]);
-  const [announcements, setAnnouncements] = useState([]);
-  const [activeTab, setActiveTab] = useState('attendance');
-  const [loading, setLoading] = useState(false);
+  const [children, setChildren] = useState<Student[]>([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [marks, setMarks] = useState<MarkRecord[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [tab, setTab] = useState<Tab>("attendance");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    fetchChildrenData();
-  }, []);
+  const loadChildren = useCallback(async () => { setLoading(true); setError(""); try { const linked = await getParentChildren(); setChildren(linked); setSelectedId((current) => current || linked[0]?.id || ""); } catch (unknownError: unknown) { setError(unknownError instanceof Error ? unknownError.message : "Could not load linked children."); } finally { setLoading(false); } }, []);
+  useEffect(() => { void loadChildren(); }, [loadChildren]);
+  useEffect(() => { if (!selectedId) return; let active = true; setLoading(true); setError(""); Promise.all([getAttendanceByStudent(selectedId), getMarksByStudent(selectedId), getAssignmentsByStudent(selectedId), getAllAnnouncements()]).then(([attendanceData, marksData, assignmentData, announcementData]) => { if (active) { setAttendance(attendanceData); setMarks(marksData); setAssignments(assignmentData); setAnnouncements(announcementData); } }).catch((unknownError: unknown) => { if (active) setError(unknownError instanceof Error ? unknownError.message : "Could not load this child's academic data."); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [selectedId]);
 
-  useEffect(() => {
-    if (selectedChild) {
-      fetchChildData(selectedChild);
-    }
-  }, [selectedChild]);
+  const selectedChild = children.find((child) => child.id === selectedId);
+  const attendancePercentage = useMemo(() => { const counted = attendance.filter((record) => record.status !== "PENDING"); return counted.length ? Math.round((counted.filter((record) => record.status === "PRESENT" || record.status === "LATE").length / counted.length) * 100) : null; }, [attendance]);
+  const marksAverage = useMemo(() => { const values = marks.map((mark) => { const score = mark.marksObtained ?? mark.marks; return score === undefined ? null : mark.totalMarks ? (score / mark.totalMarks) * 100 : score; }).filter((value): value is number => value !== null); return values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null; }, [marks]);
 
-  const fetchChildrenData = async () => {
-    setLoading(true);
-    try {
-      // In a real scenario, fetch parent's children
-      const response = await axios.get(`${API_BASE_URL}/students/parent`);
-      setChildrenData(response.data);
-      if (response.data.length > 0) {
-        setSelectedChild(response.data[0].id);
-      }
-    } catch (error) {
-      console.error('Error fetching children data:', error);
-    }
-    setLoading(false);
-  };
-
-  const fetchChildData = async (childId) => {
-    setLoading(true);
-    try {
-      const [attendanceRes, marksRes, announcementsRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/attendance/student/${childId}`),
-        axios.get(`${API_BASE_URL}/marks/student/${childId}`),
-        axios.get(`${API_BASE_URL}/announcements`),
-      ]);
-      setAttendance(attendanceRes.data);
-      setMarks(marksRes.data);
-      setAnnouncements(announcementsRes.data);
-    } catch (error) {
-      console.error('Error fetching child data:', error);
-    }
-    setLoading(false);
-  };
-
-  const attendancePercentage =
-    attendance.length > 0
-      ? Math.round(
-          (attendance.filter((a) => a.status === 'PRESENT').length /
-            attendance.length) *
-            100
-        )
-      : 0;
-
-  const averageMarks =
-    marks.length > 0
-      ? (marks.reduce((sum, m) => sum + m.marksObtained, 0) / marks.length).toFixed(2)
-      : 0;
-
-  return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Parent Portal</h1>
-          <p className="text-gray-600 mt-2">Monitor your child's progress</p>
-        </div>
-
-        {/* Child Selector */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Child
-          </label>
-          <select
-            value={selectedChild || ''}
-            onChange={(e) => setSelectedChild(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-          >
-            {childrenData.map((child) => (
-              <option key={child.id} value={child.id}>
-                {child.name} - {child.className}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Overview Cards */}
-        {selectedChild && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="text-sm text-gray-600 mb-2">Attendance</div>
-              <div className="text-3xl font-bold text-blue-600">{attendancePercentage}%</div>
-              <p className="text-xs text-gray-500 mt-2">
-                {attendance.filter((a) => a.status === 'PRESENT').length} of{' '}
-                {attendance.length} days
-              </p>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="text-sm text-gray-600 mb-2">Average Marks</div>
-              <div className="text-3xl font-bold text-green-600">{averageMarks}</div>
-              <p className="text-xs text-gray-500 mt-2">{marks.length} assessments</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="text-sm text-gray-600 mb-2">Alerts</div>
-              <div className="text-3xl font-bold text-red-600">
-                {announcements.filter((a) => a.category === 'ALERT').length}
-              </div>
-              <p className="text-xs text-gray-500 mt-2">Important notices</p>
-            </div>
-          </div>
-        )}
-
-        {/* Tab Navigation */}
-        <div className="bg-white rounded-lg shadow-md">
-          <div className="border-b flex">
-            <button
-              onClick={() => setActiveTab('attendance')}
-              className={`flex-1 py-4 px-6 text-center font-semibold ${
-                activeTab === 'attendance'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600'
-              }`}
-            >
-              Attendance
-            </button>
-            <button
-              onClick={() => setActiveTab('marks')}
-              className={`flex-1 py-4 px-6 text-center font-semibold ${
-                activeTab === 'marks'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600'
-              }`}
-            >
-              Marks
-            </button>
-            <button
-              onClick={() => setActiveTab('announcements')}
-              className={`flex-1 py-4 px-6 text-center font-semibold ${
-                activeTab === 'announcements'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600'
-              }`}
-            >
-              Announcements
-            </button>
-          </div>
-
-          <div className="p-6">
-            {loading ? (
-              <div className="text-center text-gray-500 py-8">Loading...</div>
-            ) : activeTab === 'attendance' ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2">Date</th>
-                      <th className="text-left py-2">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {attendance.slice(0, 10).map((record) => (
-                      <tr key={record.id} className="border-b hover:bg-gray-50">
-                        <td className="py-2">
-                          {new Date(record.attendanceDate).toLocaleDateString()}
-                        </td>
-                        <td className="py-2">
-                          <span
-                            className={`px-2 py-1 rounded text-xs ${
-                              record.status === 'PRESENT'
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {record.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : activeTab === 'marks' ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2">Subject</th>
-                      <th className="text-left py-2">Marks</th>
-                      <th className="text-left py-2">Total</th>
-                      <th className="text-left py-2">Percentage</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {marks.map((mark) => (
-                      <tr key={mark.id} className="border-b hover:bg-gray-50">
-                        <td className="py-2">{mark.subject}</td>
-                        <td className="py-2">{mark.marksObtained}</td>
-                        <td className="py-2">{mark.totalMarks}</td>
-                        <td className="py-2">
-                          {((mark.marksObtained / mark.totalMarks) * 100).toFixed(1)}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {announcements.map((announcement) => (
-                  <div key={announcement.id} className="p-4 border rounded-lg">
-                    <h4 className="font-semibold text-gray-900">{announcement.title}</h4>
-                    <p className="text-sm text-gray-600 mt-1">{announcement.content}</p>
-                    <p className="text-xs text-gray-500 mt-2">
-                      {new Date(announcement.publishedAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="mx-auto max-w-6xl space-y-7"><header><h1 className="flex items-center gap-3 text-3xl font-black"><Users className="h-8 w-8 text-purple-600" />Child progress</h1><p className="mt-1 text-slate-500">Only students linked to your authenticated parent account are available.</p></header>{loading && children.length === 0 ? <LoadingState label="Loading linked children…" /> : error && children.length === 0 ? <ErrorState message={error} onRetry={() => void loadChildren()} /> : children.length === 0 ? <EmptyState title="No linked students" message="Ask an administrator to link your parent email to a student profile." /> : <><label className="grid max-w-lg gap-1 text-sm font-semibold">Student<select value={selectedId} onChange={(event) => setSelectedId(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">{children.map((child) => <option key={child.id} value={child.id}>{child.name} · {child.studentClass}</option>)}</select></label>{error && <ErrorState message={error} />}{selectedChild && !error && <><div className="grid gap-4 sm:grid-cols-4"><Summary icon={CalendarCheck} label="Attendance" value={attendancePercentage === null ? "—" : `${attendancePercentage}%`} /><Summary icon={BookOpenCheck} label="Marks average" value={marksAverage === null ? "—" : `${marksAverage}%`} /><Summary icon={BookOpenCheck} label="Assignments" value={assignments.length} /><Summary icon={Bell} label="Announcements" value={announcements.length} /></div><section className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"><div className="flex overflow-x-auto border-b border-slate-200 dark:border-slate-800">{(["attendance", "marks", "assignments", "announcements"] as Tab[]).map((item) => <button key={item} type="button" onClick={() => setTab(item)} className={`min-w-36 flex-1 px-5 py-4 text-sm font-bold capitalize ${tab === item ? "border-b-2 border-purple-600 text-purple-600" : "text-slate-500"}`}>{item}</button>)}</div><div className="p-5">{loading ? <LoadingState label={`Loading ${selectedChild.name}'s records…`} /> : tab === "attendance" ? <AttendanceTable records={attendance} /> : tab === "marks" ? <MarksTable records={marks} /> : tab === "assignments" ? <AssignmentList assignments={assignments} /> : <AnnouncementList announcements={announcements} />}</div></section></>}</>}</div>;
 }
+
+function Summary({ icon: Icon, label, value }: { icon: typeof Users; label: string; value: string | number }) { return <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><Icon className="h-5 w-5 text-purple-600" /><p className="mt-3 text-3xl font-black">{value}</p><p className="text-sm text-slate-500">{label}</p></div>; }
+function AttendanceTable({ records }: { records: AttendanceRecord[] }) { if (!records.length) return <EmptyState title="No attendance" message="No attendance has been recorded for this student." />; return <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th className="pb-3">Date</th><th className="pb-3">Class</th><th className="pb-3">Status</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{records.map((record, index) => <tr key={record.id || index}><td className="py-3">{record.attendanceDate || record.date}</td><td className="py-3">{record.classId}</td><td className="py-3 font-bold">{record.status}</td></tr>)}</tbody></table></div>; }
+function MarksTable({ records }: { records: MarkRecord[] }) { if (!records.length) return <EmptyState title="No marks" message="No results have been published for this student." />; return <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th className="pb-3">Subject</th><th className="pb-3">Score</th><th className="pb-3">Total</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{records.map((record) => <tr key={record.id}><td className="py-3 font-semibold">{record.subject}</td><td className="py-3">{record.marksObtained ?? record.marks ?? "—"}</td><td className="py-3">{record.totalMarks ?? "—"}</td></tr>)}</tbody></table></div>; }
+function AssignmentList({ assignments }: { assignments: Assignment[] }) { if (!assignments.length) return <EmptyState title="No assignments" message="No published assignments are available for this student." />; return <div className="space-y-3">{assignments.map((assignment) => <article key={assignment.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><div className="flex justify-between gap-3"><div><p className="text-xs font-bold text-purple-600">{assignment.subject}</p><h3 className="font-bold">{assignment.title}</h3></div><span className="text-xs font-semibold">Due {new Date(assignment.dueDate).toLocaleDateString()}</span></div><p className="mt-1 text-sm text-slate-500">{assignment.description}</p></article>)}</div>; }
+function AnnouncementList({ announcements }: { announcements: Announcement[] }) { if (!announcements.length) return <EmptyState title="No announcements" message="There are no announcements to show." />; return <div className="space-y-3">{announcements.map((announcement) => <article key={announcement.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><h3 className="font-bold">{announcement.title}</h3><p className="mt-1 text-sm text-slate-500">{announcement.message || announcement.content}</p></article>)}</div>; }

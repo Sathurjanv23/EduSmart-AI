@@ -1,185 +1,50 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import axios from 'axios';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { CalendarClock, FileUp, NotebookPen, X } from "lucide-react";
+import { getAvailableAssignments, getMySubmissions, submitAssignment, uploadAssignmentFile } from "@/app/services/assignmentService";
+import { Assignment, AssignmentSubmission } from "@/app/types/api";
+import { EmptyState, ErrorState, InlineNotice, LoadingState } from "@/components/AsyncState";
+import { ProtectedFileButton } from "@/components/ProtectedFileButton";
 
 export default function StudentAssignmentsPage() {
-  const [assignments, setAssignments] = useState([]);
-  const [submissions, setSubmissions] = useState([]);
-  const [selectedAssignment, setSelectedAssignment] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [submissionFile, setSubmissionFile] = useState(null);
-  const [submissionText, setSubmissionText] = useState('');
-  const studentId = 'current-student-id'; // Replace with actual student ID
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
+  const [selected, setSelected] = useState<Assignment | null>(null);
+  const [text, setText] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
-  useEffect(() => {
-    fetchAssignments();
-    fetchSubmissions();
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    try { const [available, mine] = await Promise.all([getAvailableAssignments(), getMySubmissions()]); setAssignments(available); setSubmissions(mine); }
+    catch (unknownError: unknown) { setError(unknownError instanceof Error ? unknownError.message : "Could not load assignments."); }
+    finally { setLoading(false); }
   }, []);
+  useEffect(() => { void load(); }, [load]);
+  const byAssignment = useMemo(() => new Map(submissions.map((submission) => [submission.assignmentId, submission])), [submissions]);
 
-  const fetchAssignments = async () => {
-    setLoading(true);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selected) return;
+    if (!text.trim() && !file) { setError("Add a written response or attach a file."); return; }
+    if (file && file.size > 10 * 1024 * 1024) { setError("The attachment must be 10 MB or smaller."); return; }
+    setSaving(true); setError(""); setNotice("");
     try {
-      const response = await axios.get(`${API_BASE_URL}/assignments`);
-      setAssignments(response.data);
-    } catch (error) {
-      console.error('Error fetching assignments:', error);
-    }
-    setLoading(false);
+      const upload = file ? await uploadAssignmentFile(file) : undefined;
+      const created = await submitAssignment({ assignmentId: selected.id, submissionText: text.trim() || undefined, submissionFileUrl: upload?.fileUrl });
+      setSubmissions((current) => [created, ...current.filter((item) => item.assignmentId !== created.assignmentId)]);
+      setSelected(null); setText(""); setFile(null); setNotice("Your assignment was submitted successfully.");
+    } catch (unknownError: unknown) { setError(unknownError instanceof Error ? unknownError.message : "Could not submit the assignment."); }
+    finally { setSaving(false); }
   };
 
-  const fetchSubmissions = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/assignments/submissions?studentId=${studentId}`);
-      setSubmissions(response.data);
-    } catch (error) {
-      console.error('Error fetching submissions:', error);
-    }
-  };
-
-  const handleSubmitAssignment = async (assignmentId) => {
-    if (!submissionText && !submissionFile) {
-      alert('Please enter submission text or upload a file');
-      return;
-    }
-
-    try {
-      const formData = new FormData();
-      if (submissionFile) {
-        formData.append('file', submissionFile);
-      }
-
-      const fileResponse = await axios.post(`${API_BASE_URL}/upload`, formData);
-      const fileUrl = fileResponse.data.url;
-
-      await axios.post(`${API_BASE_URL}/assignments/submissions`, {
-        assignmentId,
-        studentId,
-        submissionText,
-        submissionFileUrl: fileUrl,
-      });
-
-      setSubmissionText('');
-      setSubmissionFile(null);
-      setSelectedAssignment(null);
-      fetchSubmissions();
-      alert('Assignment submitted successfully!');
-    } catch (error) {
-      console.error('Error submitting assignment:', error);
-      alert('Error submitting assignment');
-    }
-  };
-
-  const getSubmissionStatus = (assignmentId) => {
-    const submission = submissions.find((s) => s.assignmentId === assignmentId);
-    if (!submission) return 'Not Submitted';
-    return submission.status;
-  };
-
-  const isAssignmentDue = (dueDate) => {
-    return new Date(dueDate) < new Date();
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">My Assignments</h1>
-          <p className="text-gray-600 mt-2">View and submit your assignments</p>
-        </div>
-
-        {/* Assignments Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {loading ? (
-            <div className="col-span-3 text-center text-gray-500 py-8">Loading...</div>
-          ) : assignments.length === 0 ? (
-            <div className="col-span-3 text-center text-gray-500 py-8">No assignments found</div>
-          ) : (
-            assignments.map((assignment) => (
-              <div key={assignment.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
-                <h3 className="text-lg font-bold text-gray-900 mb-2">{assignment.title}</h3>
-                <p className="text-gray-600 text-sm mb-4">{assignment.description}</p>
-                <div className="space-y-2 mb-4">
-                  <p className="text-sm text-gray-600">
-                    <strong>Subject:</strong> {assignment.subject}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <strong>Due Date:</strong> {new Date(assignment.dueDate).toLocaleDateString()}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <strong>Max Marks:</strong> {assignment.maxMarks}
-                  </p>
-                  <div>
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                      getSubmissionStatus(assignment.id) === 'GRADED'
-                        ? 'bg-green-100 text-green-800'
-                        : getSubmissionStatus(assignment.id) === 'SUBMITTED'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {getSubmissionStatus(assignment.id)}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedAssignment(assignment.id)}
-                  disabled={isAssignmentDue(assignment.dueDate) && getSubmissionStatus(assignment.id) === 'Not Submitted'}
-                  className={`w-full px-4 py-2 rounded-lg ${
-                    isAssignmentDue(assignment.dueDate) && getSubmissionStatus(assignment.id) === 'Not Submitted'
-                      ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
-                  }`}
-                >
-                  {getSubmissionStatus(assignment.id) === 'Not Submitted' ? 'Submit' : 'View'}
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Submission Modal */}
-        {selectedAssignment && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-8 max-w-md w-full">
-              <h2 className="text-2xl font-bold mb-4">Submit Assignment</h2>
-              <div className="space-y-4">
-                <textarea
-                  placeholder="Enter your submission text"
-                  value={submissionText}
-                  onChange={(e) => setSubmissionText(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md h-24"
-                />
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Upload File (Optional)
-                  </label>
-                  <input
-                    type="file"
-                    onChange={(e) => setSubmissionFile(e.target.files[0])}
-                    className="w-full"
-                  />
-                </div>
-                <div className="flex gap-4">
-                  <button
-                    onClick={() => handleSubmitAssignment(selectedAssignment)}
-                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                  >
-                    Submit
-                  </button>
-                  <button
-                    onClick={() => setSelectedAssignment(null)}
-                    className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  return <div className="mx-auto max-w-6xl space-y-7"><header><h1 className="flex items-center gap-3 text-3xl font-black"><NotebookPen className="h-8 w-8 text-emerald-600" />My assignments</h1><p className="mt-1 text-slate-500">Published work available to your authenticated student profile.</p></header>{notice && <InlineNotice message={notice} />}{error && !selected && <InlineNotice message={error} tone="error" />}{loading ? <LoadingState label="Loading assignments and submissions…" /> : error && assignments.length === 0 ? <ErrorState message={error} onRetry={() => void load()} /> : assignments.length === 0 ? <EmptyState title="No assignments available" message="Published assignments for your class will appear here." /> : <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{assignments.map((assignment) => { const submission = byAssignment.get(assignment.id); const overdue = new Date(assignment.dueDate).getTime() < Date.now(); return <article key={assignment.id} className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-emerald-600">{assignment.subject}</p><h2 className="mt-1 text-xl font-black">{assignment.title}</h2></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold dark:bg-slate-800">{submission?.status || (overdue ? "CLOSED" : "OPEN")}</span></div><p className="mt-3 flex-1 text-sm text-slate-500">{assignment.description || "No description provided."}</p><p className="mt-5 flex items-center gap-2 text-xs font-semibold text-slate-500"><CalendarClock className="h-4 w-4" />Due {formatDate(assignment.dueDate)} · {assignment.maxMarks} marks</p>{submission?.submissionText && <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200">Your response: {submission.submissionText}</p>}{submission?.submissionFileUrl && <ProtectedFileButton fileUrl={submission.submissionFileUrl} />}{submission?.feedback && <p className="mt-3 rounded-xl bg-blue-50 p-3 text-sm text-blue-800 dark:bg-blue-950/30 dark:text-blue-200">Feedback: {submission.feedback}</p>}<button type="button" onClick={() => { setSelected(assignment); setError(""); setText(""); setFile(null); }} disabled={Boolean(submission) || overdue} className="mt-5 rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{submission ? "Submission recorded" : overdue ? "Deadline passed" : "Submit work"}</button></article>; })}</div>}
+    {selected && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true"><form onSubmit={submit} className="w-full max-w-xl rounded-3xl bg-white p-7 dark:bg-slate-900"><div className="flex items-start justify-between"><div><p className="text-xs font-bold text-emerald-600">{selected.subject}</p><h2 className="text-xl font-black">{selected.title}</h2></div><button type="button" onClick={() => setSelected(null)} aria-label="Close"><X className="h-5 w-5" /></button></div><label className="mt-6 grid gap-2 text-sm font-semibold">Written response<textarea rows={6} value={text} onChange={(event) => setText(event.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800" /></label><label className="mt-4 grid gap-2 text-sm font-semibold">Attachment (optional, max 10 MB)<span className="flex items-center gap-2 rounded-xl border border-dashed border-slate-300 p-4 dark:border-slate-700"><FileUp className="h-5 w-5" /><input type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt" onChange={(event) => setFile(event.target.files?.[0] || null)} /></span></label>{error && <div className="mt-4"><InlineNotice message={error} tone="error" /></div>}<button disabled={saving} className="mt-6 w-full rounded-xl bg-emerald-600 py-3 font-bold text-white disabled:opacity-60">{saving ? "Uploading and submitting…" : "Submit assignment"}</button></form></div>}
+  </div>;
 }
+
+function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); }

@@ -3,15 +3,28 @@ package com.sms.backend.dto;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import jakarta.validation.constraints.Future;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
 public class AnnouncementDTO {
     private String id;
+    @NotBlank @Size(max = 160)
     private String title;
+    @NotBlank @Size(max = 10000)
     private String content;
-    private List<String> visibleTo;
+    @NotEmpty @Size(max = 4)
+    private List<@Pattern(regexp = "ADMIN|TEACHER|STUDENT|PARENT") String> visibleTo;
+    @Pattern(regexp = "LOW|NORMAL|HIGH|URGENT")
     private String priority;
+    @Size(max = 80)
     private String category;
+    @Size(max = 500)
     private String attachmentUrl;
     private LocalDateTime publishedAt;
+    @Future
     private LocalDateTime expiresAt;
 
     public AnnouncementDTO() {

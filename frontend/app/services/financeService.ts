@@ -1,21 +1,22 @@
 import { apiRequest } from "./apiService";
+import { FeeSummary, FeeTransaction } from "@/app/types/api";
 
-export async function getFeeStructures() {
-  return apiRequest("/fee-structures", {
-    method: "GET",
-  });
+export const getFeeStructures = () => apiRequest<unknown[]>("/fee-structure");
+export const getDuesForStudent = (studentId: string) => apiRequest<FeeTransaction[]>(`/fee-transactions/student/${encodeURIComponent(studentId)}`);
+export const getMyFeeTransactions = () => apiRequest<FeeTransaction[]>("/fee-transactions/me");
+export const getMyFeeSummary = () => apiRequest<FeeSummary>("/fee-transactions/summary");
+export const getFeeSummaryForStudent = (studentId: string) => apiRequest<FeeSummary>(`/fee-transactions/student/${encodeURIComponent(studentId)}/summary`);
+
+/** Server-recorded payments are an administrator workflow, not a client-side claim of payment. */
+export interface RecordPaymentInput {
+  studentId: string;
+  feeStructureId: string;
+  amount: number;
+  paidAmount: number;
+  paymentMode: "CASH" | "CHEQUE" | "ONLINE" | "TEST";
+  paymentGateway?: string;
+  transactionId?: string;
+  dueDate?: string;
 }
 
-export async function getDuesForStudent(studentId: string) {
-  // Mocking endpoint for now as per likely backend structure
-  return apiRequest(`/finance/dues/${studentId}`, {
-    method: "GET",
-  });
-}
-
-export async function processPayment(paymentData: any) {
-  return apiRequest("/finance/pay", {
-    method: "POST",
-    body: JSON.stringify(paymentData),
-  });
-}
+export const recordVerifiedPayment = (payment: RecordPaymentInput) => apiRequest<FeeTransaction>("/fee-transactions", { method: "POST", body: payment });

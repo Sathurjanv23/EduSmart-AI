@@ -3,13 +3,14 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useRole, Role } from './RoleProvider';
+import { Role } from '@/app/services/authService';
+import { useAuth } from './AuthProvider';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Navbar } from './Navbar';
 import {
   LayoutDashboard, Users, Calendar, BookOpen, DollarSign, MessageSquare,
   Bus, Shield, Settings, FileText, School, X,
-  GraduationCap, ClipboardCheck, Presentation, PieChart, CreditCard,
+  ClipboardCheck, Presentation, PieChart, CreditCard,
   BrainCircuit, Zap, BookMarked
 } from 'lucide-react';
 
@@ -43,17 +44,15 @@ const getSidebarGroupsForRole = (role: Role) => {
           items: [
             { name: 'Dashboard',      href: '/student/dashboard',    icon: LayoutDashboard },
             { name: 'My Attendance',  href: '/student/attendance',   icon: ClipboardCheck },
-            { name: 'My Results',     href: '/admin/exams',          icon: FileText },
-            { name: 'Library',        href: '/admin/library',        icon: BookOpen },
-            { name: 'Timetable',      href: '/admin/timetable',      icon: Calendar },
+            { name: 'My Marks',       href: '/student/marks',        icon: FileText },
+            { name: 'My Exams',       href: '/student/exams',        icon: Calendar },
+            { name: 'Assignments',    href: '/student/assignments',  icon: BookOpen },
           ],
         },
         {
           name: 'My Portal',
           items: [
-            { name: 'Fee Status',        href: '/admin/finance/fees',  icon: CreditCard },
-            { name: 'Chat with Teachers',href: '/admin/communication', icon: MessageSquare },
-            { name: 'Settings',          href: '/admin/settings',      icon: Settings },
+            { name: 'Fee Status',        href: '/student/fees',         icon: CreditCard },
           ],
         },
       ];
@@ -65,19 +64,9 @@ const getSidebarGroupsForRole = (role: Role) => {
           items: [
             { name: 'Dashboard',       href: '/teacher/dashboard',  icon: LayoutDashboard },
             { name: 'Mark Attendance', href: '/teacher/attendance', icon: ClipboardCheck },
-            { name: 'Enter Marks',     href: '/admin/exams',        icon: FileText },
-            { name: 'My Timetable',    href: '/admin/timetable',    icon: Calendar },
-            { name: 'My Students',     href: '/admin/students',     icon: Users },
-          ],
-        },
-        {
-          name: 'Tools & AI',
-          items: [
-            { name: 'Question Generator', href: '/admin/ai/generator', icon: BrainCircuit },
-            { name: 'Library',            href: '/admin/library',       icon: BookOpen },
-            { name: 'Chats',              href: '/admin/communication', icon: MessageSquare },
-            { name: 'My Salary',          href: '/admin/finance/salary',icon: DollarSign },
-            { name: 'Settings',           href: '/admin/settings',      icon: Settings },
+            { name: 'Exams & Marks',   href: '/teacher/exams',       icon: FileText },
+            { name: 'Assignments',     href: '/teacher/assignments', icon: BookOpen },
+            { name: 'Risk Predictor',  href: '/teacher/predictor',   icon: Zap },
           ],
         },
       ];
@@ -88,17 +77,7 @@ const getSidebarGroupsForRole = (role: Role) => {
           name: "Child's Overview",
           items: [
             { name: 'Dashboard',      href: '/parent/dashboard',   icon: LayoutDashboard },
-            { name: 'Attendance',     href: '/student/attendance', icon: ClipboardCheck },
-            { name: 'Results',        href: '/admin/exams',        icon: FileText },
-            { name: 'Timetable',      href: '/admin/timetable',    icon: Calendar },
-          ],
-        },
-        {
-          name: 'Communications',
-          items: [
-            { name: 'Fee Payment',     href: '/admin/finance/fees',  icon: CreditCard },
-            { name: 'Chat Teachers',   href: '/admin/communication', icon: MessageSquare },
-            { name: 'Settings',        href: '/admin/settings',      icon: Settings },
+            { name: 'Child Progress', href: '/parent/portal',      icon: ClipboardCheck },
           ],
         },
       ];
@@ -112,6 +91,7 @@ const getSidebarGroupsForRole = (role: Role) => {
             { name: 'Global Dashboard',   href: '/admin/dashboard',       icon: LayoutDashboard },
             { name: 'Branch Management',  href: '/admin/infrastructure',  icon: School },
             { name: 'Staff Management',   href: '/admin/staff',           icon: Presentation },
+            { name: 'User Accounts',      href: '/admin/users',           icon: Shield },
             { name: 'Student Management', href: '/admin/students',        icon: Users },
             { name: 'Library',            href: '/admin/library',         icon: BookMarked },
             { name: 'Timetable',          href: '/admin/timetable',       icon: Calendar },
@@ -150,17 +130,19 @@ const getSidebarGroupsForRole = (role: Role) => {
 export function ErpLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
-  const { role } = useRole();
+  const { role } = useAuth();
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
   }, []);
 
+  if (!role) return null;
   const sidebarGroups = getSidebarGroupsForRole(role);
   const activeClass  = ROLE_ACTIVE[role];
   const activeIcon   = ROLE_ICON_ACTIVE[role];
   const logoGradient = ROLE_LOGO[role];
+  const dashboardHref = `/${role.toLowerCase()}/dashboard`;
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
@@ -181,7 +163,7 @@ export function ErpLayout({ children }: { children: React.ReactNode }) {
       >
         {/* Logo */}
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 px-5">
-          <Link href="/admin" className="flex items-center gap-3">
+          <Link href={dashboardHref} className="flex items-center gap-3">
             <motion.div
               key={role}
               initial={{ rotate: -90, scale: 0 }}
@@ -192,8 +174,8 @@ export function ErpLayout({ children }: { children: React.ReactNode }) {
               <School className="h-5 w-5 text-white" />
             </motion.div>
             <div>
-              <p className="text-base font-bold leading-none text-slate-900 dark:text-white">EduSmart</p>
-              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mt-0.5">Anti-Gravity</p>
+              <p className="text-base font-bold leading-none text-slate-900 dark:text-white">CampusCore</p>
+              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mt-0.5">School Management</p>
             </div>
           </Link>
           <button
@@ -268,7 +250,7 @@ export function ErpLayout({ children }: { children: React.ReactNode }) {
         {/* Sidebar footer – version tag */}
         <div className="shrink-0 border-t border-slate-200 dark:border-slate-800 px-5 py-3">
           <p className="text-[10px] text-slate-400 dark:text-slate-600 text-center">
-            EduSmart v2.0 · Anti-Gravity Edition
+            CampusCore · Secure role portal
           </p>
         </div>
       </aside>

@@ -1,45 +1,15 @@
-export async function addMarks(marksData: {
-  studentName: string;
-  parentEmail: string;
+import { apiRequest } from "./apiService";
+import { MarkRecord } from "@/app/types/api";
+
+export interface MarksInput {
+  studentId: string;
   subject: string;
   marks: number;
-}) {
-  const token = localStorage.getItem("token");
-
-  const response = await fetch("http://localhost:8080/api/marks", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(marksData),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.message || "Failed to add marks");
-  }
-
-  return data;
+  totalMarks: number;
+  examId?: string;
 }
 
-export async function getAllMarks() {
-  const token = localStorage.getItem("token");
-
-  const response = await fetch("http://localhost:8080/api/marks", {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.message || "Failed to fetch marks");
-  }
-
-  return data;
-}
+export const addMarks = (marks: MarksInput) => apiRequest<MarkRecord>("/marks", { method: "POST", body: marks });
+export const getAllMarks = () => apiRequest<MarkRecord[]>("/marks");
+export const getMyMarks = () => apiRequest<MarkRecord[]>("/marks/me");
+export const getMarksByStudent = (studentId: string) => apiRequest<MarkRecord[]>(`/marks/student/${encodeURIComponent(studentId)}`);

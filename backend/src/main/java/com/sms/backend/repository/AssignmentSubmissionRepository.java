@@ -5,6 +5,7 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface AssignmentSubmissionRepository extends MongoRepository<AssignmentSubmission, String> {
@@ -12,5 +13,5 @@ public interface AssignmentSubmissionRepository extends MongoRepository<Assignme
 
     List<AssignmentSubmission> findByStudentId(String studentId);
 
-    AssignmentSubmission findByAssignmentIdAndStudentId(String assignmentId, String studentId);
+    Optional<AssignmentSubmission> findByAssignmentIdAndStudentId(String assignmentId, String studentId);
 }

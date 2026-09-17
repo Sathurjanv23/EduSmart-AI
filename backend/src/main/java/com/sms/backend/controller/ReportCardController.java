@@ -2,7 +2,6 @@ package com.sms.backend.controller;
 
 import com.sms.backend.model.ReportCard;
 import com.sms.backend.service.ReportCardService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -10,11 +9,13 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/report-cards")
-@CrossOrigin(origins = "*")
 public class ReportCardController {
 
-    @Autowired
-    private ReportCardService reportCardService;
+    private final ReportCardService reportCardService;
+
+    public ReportCardController(ReportCardService reportCardService) {
+        this.reportCardService = reportCardService;
+    }
 
     @PostMapping
     public ResponseEntity<ReportCard> createReportCard(@RequestBody ReportCard reportCard) {

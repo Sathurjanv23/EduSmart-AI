@@ -1,16 +1,14 @@
 package com.sms.backend.dto;
 
-import com.sms.backend.model.User;
-
 public class SignupResponse {
 
     private String message;
-    private User user;
+    private AuthenticatedUserResponse user;
 
     public SignupResponse() {
     }
 
-    public SignupResponse(String message, User user) {
+    public SignupResponse(String message, AuthenticatedUserResponse user) {
         this.message = message;
         this.user = user;
     }
@@ -23,11 +21,11 @@ public class SignupResponse {
         this.message = message;
     }
 
-    public User getUser() {
+    public AuthenticatedUserResponse getUser() {
         return user;
     }
 
-    public void setUser(User user) {
+    public void setUser(AuthenticatedUserResponse user) {
         this.user = user;
     }
 }

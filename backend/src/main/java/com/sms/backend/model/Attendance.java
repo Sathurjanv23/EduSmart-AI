@@ -2,18 +2,27 @@ package com.sms.backend.model;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.Indexed;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Document(collection = "attendance")
+@CompoundIndex(
+        name = "student_class_date_unique",
+        def = "{'studentId': 1, 'classId': 1, 'attendanceDate': 1}",
+        unique = true)
 public class Attendance {
 
     @Id
     private String id;
 
+    @Indexed
     private String studentId;
+    @Indexed
     private String classId;
+    @Indexed
     private LocalDate attendanceDate;
     private String studentName;
     private String parentEmail;
@@ -22,6 +31,9 @@ public class Attendance {
     private LocalDateTime checkInTime;
     private LocalDateTime checkOutTime;
     private String remark;
+    private String recordedBy;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 
     public Attendance() {
     }
@@ -125,4 +137,11 @@ public class Attendance {
     public void setRemark(String remark) {
         this.remark = remark;
     }
+
+    public String getRecordedBy() { return recordedBy; }
+    public void setRecordedBy(String recordedBy) { this.recordedBy = recordedBy; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

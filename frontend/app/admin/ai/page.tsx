@@ -1,72 +1,44 @@
-"use client";
-
-import { motion } from "framer-motion";
-import { BrainCircuit, Zap, ArrowRight, Sparkles, Cpu } from 'lucide-react';
 import Link from "next/link";
+import { ArrowRight, BrainCircuit, Cpu, Zap } from "lucide-react";
+import { InlineNotice } from "@/components/AsyncState";
+
+const modules = [
+  {
+    title: "Performance predictor",
+    description: "Run authorized, server-side risk inference from each student's recorded academic data.",
+    status: "Backend connected",
+    href: "/admin/ai/predictor",
+    icon: Zap,
+    available: true,
+  },
+  {
+    title: "Question generator",
+    description: "A server-side AI provider has not been configured, so generation remains disabled.",
+    status: "Unavailable",
+    href: "/admin/ai/generator",
+    icon: BrainCircuit,
+    available: false,
+  },
+];
 
 export default function AIOverview() {
-  const cards = [
-    { 
-      title: "Performance Predictor", 
-      desc: "Neural network analysis to forecast student grades and success probability.",
-      href: "/admin/ai/predictor", 
-      icon: Zap,
-      color: "bg-rose-600",
-      stats: "94.2% Accuracy"
-    },
-    { 
-      title: "Question Generator", 
-      desc: "Instantly create exam papers and quizzes using Generative AI.",
-      href: "/admin/ai/generator", 
-      icon: BrainCircuit,
-      color: "bg-blue-600",
-      stats: "120+ Papers Gen."
-    }
-  ];
-
   return (
-    <div className="p-6 lg:p-10 max-w-[1200px] mx-auto min-h-[80vh] flex flex-col justify-center">
-      
-      <div className="text-center mb-16">
-        <motion.div 
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="w-20 h-20 bg-rose-100 dark:bg-rose-900/20 text-rose-600 rounded-[2rem] flex items-center justify-center mx-auto mb-6"
-        >
-          <Cpu className="w-10 h-10" />
-        </motion.div>
-        <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight mb-4">Anti-Gravity <span className="text-rose-600">AI Suite</span></h1>
-        <p className="text-slate-500 font-medium max-w-md mx-auto">Advanced intelligence tools designed to empower teachers and optimize student performance.</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {cards.map((card, idx) => (
-          <Link href={card.href} key={idx}>
-            <motion.div 
-              whileHover={{ y: -10, scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="bg-white dark:bg-slate-900/50 p-10 rounded-[3rem] border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-2xl hover:border-rose-500 transition-all cursor-pointer group h-full flex flex-col justify-between"
-            >
-              <div>
-                <div className={`w-14 h-14 ${card.color} text-white rounded-2xl flex items-center justify-center mb-8 shadow-lg shadow-current/20`}>
-                  <card.icon className="w-8 h-8" />
-                </div>
-                <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-3 flex items-center gap-2">
-                  {card.title}
-                  <ArrowRight className="w-6 h-6 text-slate-300 group-hover:text-rose-600 group-hover:translate-x-2 transition-all" />
-                </h2>
-                <p className="text-slate-500 font-medium mb-8 leading-relaxed">{card.desc}</p>
-              </div>
-              
-              <div className="flex items-center gap-4 pt-6 border-t border-slate-100 dark:border-slate-800">
-                <Sparkles className="w-5 h-5 text-rose-500" />
-                <span className="text-sm font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">{card.stats}</span>
-              </div>
-            </motion.div>
+    <div className="mx-auto max-w-5xl space-y-8">
+      <header>
+        <h1 className="flex items-center gap-3 text-3xl font-black"><Cpu className="h-8 w-8 text-rose-600" />CampusCore AI</h1>
+        <p className="mt-1 text-slate-500">AI capabilities are labeled according to their actual server availability.</p>
+      </header>
+      <InlineNotice tone="info" message="No model accuracy, generated-paper count, or synthetic activity is shown without backend evidence." />
+      <div className="grid gap-5 md:grid-cols-2">
+        {modules.map(({ title, description, status, href, icon: Icon, available }) => (
+          <Link key={href} href={href} className="group rounded-3xl border border-slate-200 bg-white p-7 transition hover:border-rose-300 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900">
+            <Icon className="h-7 w-7 text-rose-600" />
+            <h2 className="mt-5 flex items-center gap-2 text-xl font-black">{title}<ArrowRight className="h-5 w-5 transition group-hover:translate-x-1" /></h2>
+            <p className="mt-2 text-sm text-slate-500">{description}</p>
+            <p className={`mt-5 text-xs font-bold uppercase tracking-wider ${available ? "text-emerald-600" : "text-amber-600"}`}>{status}</p>
           </Link>
         ))}
       </div>
-
     </div>
   );
 }

@@ -2,7 +2,6 @@ package com.sms.backend.controller;
 
 import com.sms.backend.model.Message;
 import com.sms.backend.service.MessageService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -11,11 +10,13 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/messages")
-@CrossOrigin(origins = "*")
 public class MessageController {
 
-    @Autowired
-    private MessageService messageService;
+    private final MessageService messageService;
+
+    public MessageController(MessageService messageService) {
+        this.messageService = messageService;
+    }
 
     @PostMapping
     public ResponseEntity<Message> sendMessage(@RequestBody Message message) {

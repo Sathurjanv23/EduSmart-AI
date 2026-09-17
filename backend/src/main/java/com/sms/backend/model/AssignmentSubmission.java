@@ -2,13 +2,18 @@ package com.sms.backend.model;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.Indexed;
 import java.time.LocalDateTime;
 
 @Document(collection = "assignment_submissions")
+@CompoundIndex(name = "assignment_student_unique", def = "{'assignmentId': 1, 'studentId': 1}", unique = true)
 public class AssignmentSubmission {
     @Id
     private String id;
+    @Indexed
     private String assignmentId;
+    @Indexed
     private String studentId;
     private String submissionFileUrl;
     private String submissionText;

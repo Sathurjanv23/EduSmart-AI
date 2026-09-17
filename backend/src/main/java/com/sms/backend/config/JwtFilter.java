@@ -2,6 +2,7 @@ package com.sms.backend.config;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -10,6 +11,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.sms.backend.model.User;
+import com.sms.backend.repository.UserRepository;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,37 +21,25 @@ import jakarta.servlet.http.HttpServletResponse;
 
 @Component
 public class JwtFilter extends OncePerRequestFilter {
-
     private final JwtUtil jwtUtil;
+    private final UserRepository userRepository;
 
-    public JwtFilter(JwtUtil jwtUtil) {
+    public JwtFilter(JwtUtil jwtUtil, UserRepository userRepository) {
         this.jwtUtil = jwtUtil;
+        this.userRepository = userRepository;
     }
 
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,
-            FilterChain filterChain
-    ) throws ServletException, IOException {
-
-        String path = request.getServletPath();
-
-        // ✅ Allow CORS preflight requests
+            FilterChain filterChain) throws ServletException, IOException {
         if (HttpMethod.OPTIONS.matches(request.getMethod())) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // ✅ Skip register/login/forgot-password APIs
-        if (path.startsWith("/api/auth/")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
         String authHeader = request.getHeader("Authorization");
-
-        // ✅ No token means continue. Spring Security will block protected APIs.
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -55,25 +47,25 @@ public class JwtFilter extends OncePerRequestFilter {
 
         try {
             String token = authHeader.substring(7);
-
             if (jwtUtil.isTokenValid(token)) {
-                String email = jwtUtil.extractEmail(token);
-                String role = jwtUtil.extractRole(token);
-
-                if (SecurityContextHolder.getContext().getAuthentication() == null) {
+                String email = jwtUtil.extractEmail(token).toLowerCase(Locale.ROOT);
+                User user = userRepository.findByEmail(email).orElse(null);
+                if (user != null
+                        && user.getRole() != null
+                        && user.isEmailVerified()
+                        && "ACTIVE".equals(user.getStatus())
+                        && SecurityContextHolder.getContext().getAuthentication() == null) {
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
                                     email,
                                     null,
-                                    List.of(new SimpleGrantedAuthority(role))
-                            );
-
+                                    List.of(new SimpleGrantedAuthority(user.getRole().name())));
+                    authentication.setDetails(user.getId());
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
             }
-
-        } catch (Exception ignored) {
-            // Invalid token என்றாலும் app crash ஆகக்கூடாது
+        } catch (RuntimeException exception) {
+            SecurityContextHolder.clearContext();
         }
 
         filterChain.doFilter(request, response);

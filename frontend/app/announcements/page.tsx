@@ -1,162 +1,131 @@
 "use client";
 
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Megaphone, 
-  Search, 
-  Plus, 
-  Calendar, 
-  Clock, 
-  Tag, 
-  ChevronRight, 
-  Info, 
-  AlertTriangle, 
-  CheckCircle2,
-  Pin
-} from 'lucide-react';
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { BellRing, Plus, Trash2, X } from "lucide-react";
+import { addAnnouncement, deleteAnnouncement, getAllAnnouncements } from "@/app/services/announcementService";
+import { Role } from "@/app/services/authService";
+import { Announcement } from "@/app/types/api";
+import { EmptyState, ErrorState, InlineNotice, LoadingState } from "@/components/AsyncState";
+import { ErpLayout } from "@/components/ErpLayout";
+import { ProtectedFileButton } from "@/components/ProtectedFileButton";
+import { RoleGuard } from "@/components/RoleGuard";
+import { useAuth } from "@/components/AuthProvider";
 
-const MOCK_ANNOUNCEMENTS = [
-  { 
-    id: 1, 
-    title: "Annual Sports Meet 2026", 
-    desc: "The much awaited annual sports meet will be held on June 10th at the city stadium. All students are requested to register for their respective events.",
-    date: "May 15, 2026",
-    category: "Sports",
-    type: "info",
-    pinned: true
-  },
-  { 
-    id: 2, 
-    title: "Term 1 Examination Schedule", 
-    desc: "The final timetable for Term 1 exams has been published. Please check the timetable section for detailed subject-wise dates.",
-    date: "May 12, 2026",
-    category: "Academic",
-    type: "warning",
-    pinned: false
-  },
-  { 
-    id: 3, 
-    title: "New Library Addition", 
-    desc: "We have added over 500 new books to the digital and physical library including latest research journals and fiction.",
-    date: "May 10, 2026",
-    category: "Library",
-    type: "success",
-    pinned: false
-  }
-];
+const ALL_ROLES = ["ADMIN", "TEACHER", "STUDENT", "PARENT"] as const;
+const INITIAL_FORM = { title: "", content: "", visibleTo: ["STUDENT", "PARENT"] as Role[], priority: "NORMAL" as const, category: "" };
 
-export default function AnnouncementsHub() {
-  const [activeTab, setActiveTab] = useState("All");
-  const categories = ["All", "Academic", "Sports", "Events", "Library"];
+export default function AnnouncementsPage() {
+  return <RoleGuard allowedRoles={ALL_ROLES}><ErpLayout><AnnouncementFeed /></ErpLayout></RoleGuard>;
+}
+
+function AnnouncementFeed() {
+  const { role } = useAuth();
+  const canManage = role === "ADMIN" || role === "TEACHER";
+  const [items, setItems] = useState<Announcement[]>([]);
+  const [form, setForm] = useState(INITIAL_FORM);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try { setItems(await getAllAnnouncements()); }
+    catch (unknownError: unknown) { setError(messageOf(unknownError, "Could not load announcements.")); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const create = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (form.visibleTo.length === 0) { setError("Select at least one audience role."); return; }
+    setSaving(true);
+    setError("");
+    try {
+      const created = await addAnnouncement({
+        title: form.title.trim(),
+        content: form.content.trim(),
+        visibleTo: form.visibleTo,
+        priority: form.priority,
+        category: form.category.trim() || undefined,
+      });
+      setItems((current) => [created, ...current]);
+      setForm(INITIAL_FORM);
+      setModalOpen(false);
+      setNotice("Announcement published.");
+    } catch (unknownError: unknown) {
+      setError(messageOf(unknownError, "Could not publish the announcement."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (item: Announcement) => {
+    if (!window.confirm(`Delete “${item.title}”?`)) return;
+    setError("");
+    try {
+      await deleteAnnouncement(item.id);
+      setItems((current) => current.filter((candidate) => candidate.id !== item.id));
+      setNotice("Announcement deleted.");
+    } catch (unknownError: unknown) {
+      setError(messageOf(unknownError, "Could not delete the announcement."));
+    }
+  };
+
+  const toggleAudience = (audience: Role) => {
+    setForm((current) => ({
+      ...current,
+      visibleTo: current.visibleTo.includes(audience)
+        ? current.visibleTo.filter((item) => item !== audience)
+        : [...current.visibleTo, audience],
+    }));
+  };
 
   return (
-    <div className="p-6 lg:p-10 max-w-[1400px] mx-auto min-h-screen">
-      
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-12">
-        <div className="flex items-center gap-6">
-          <div className="w-16 h-16 rounded-[2rem] bg-rose-600 text-white flex items-center justify-center shadow-2xl shadow-rose-500/30">
-            <Megaphone className="w-8 h-8" />
-          </div>
-          <div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">Announcements Hub</h1>
-            <p className="text-slate-500 font-medium mt-1">Stay updated with the latest news and alerts from the campus.</p>
-          </div>
-        </div>
-        
-        <button className="bg-slate-900 dark:bg-white dark:text-slate-900 text-white px-8 py-4 rounded-2xl font-black text-sm shadow-xl flex items-center gap-2 hover:scale-[1.02] active:scale-95 transition-all">
-          <Plus className="w-5 h-5" /> New Bulletin
-        </button>
-      </div>
-
-      {/* Tabs & Search */}
-      <div className="flex flex-col lg:flex-row items-center justify-between gap-6 mb-10">
-        <div className="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-[1.5rem] border border-slate-200 dark:border-slate-800">
-          {categories.map(cat => (
-            <button 
-              key={cat}
-              onClick={() => setActiveTab(cat)}
-              className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === cat ? 'bg-white dark:bg-slate-800 text-rose-600 shadow-lg' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-        
-        <div className="relative w-full lg:w-96">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input 
-            type="text" 
-            placeholder="Search bulletins..." 
-            className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-rose-500 transition-all font-medium text-sm"
-          />
-        </div>
-      </div>
-
-      {/* Announcements List */}
-      <div className="space-y-6">
-        <AnimatePresence mode="popLayout">
-          {MOCK_ANNOUNCEMENTS
-            .filter(a => activeTab === "All" || a.category === activeTab)
-            .map((ann, idx) => (
-            <motion.div 
-              layout
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              key={ann.id}
-              className="bg-white dark:bg-slate-900/50 p-8 rounded-[3rem] border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-2xl hover:border-rose-300 dark:hover:border-rose-900/50 transition-all group relative overflow-hidden"
-            >
-              <div className="flex flex-col md:flex-row gap-8 items-start">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${
-                  ann.type === 'warning' ? 'bg-amber-100 text-amber-600' : 
-                  ann.type === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'
-                }`}>
-                  {ann.type === 'warning' ? <AlertTriangle className="w-6 h-6" /> : 
-                   ann.type === 'success' ? <CheckCircle2 className="w-6 h-6" /> : <Info className="w-6 h-6" />}
-                </div>
-                
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    {ann.pinned && (
-                      <div className="flex items-center gap-1 text-[10px] font-black text-rose-600 uppercase tracking-widest bg-rose-50 dark:bg-rose-900/20 px-2 py-0.5 rounded-full">
-                        <Pin className="w-3 h-3" /> Pinned
-                      </div>
-                    )}
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                      <Tag className="w-3 h-3" /> {ann.category}
-                    </span>
-                  </div>
-                  <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-3 group-hover:text-rose-600 transition-colors">
-                    {ann.title}
-                  </h2>
-                  <p className="text-slate-500 font-medium leading-relaxed mb-6">
-                    {ann.desc}
-                  </p>
-                  
-                  <div className="flex flex-wrap items-center gap-6">
-                    <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-                      <Calendar className="w-4 h-4" /> {ann.date}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-                      <Clock className="w-4 h-4" /> 10:30 AM
-                    </div>
-                  </div>
-                </div>
-                
-                <button className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover:bg-rose-600 group-hover:text-white transition-all shadow-sm">
-                  <ChevronRight className="w-6 h-6" />
-                </button>
+    <div className="mx-auto max-w-4xl space-y-7">
+      <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div><h1 className="flex items-center gap-3 text-3xl font-black"><BellRing className="h-8 w-8 text-blue-600" />Announcements</h1><p className="mt-1 text-slate-500">Notices visible to your authenticated role.</p></div>
+        {canManage && <button type="button" onClick={() => { setError(""); setModalOpen(true); }} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white"><Plus className="h-4 w-4" />New announcement</button>}
+      </header>
+      {notice && <InlineNotice message={notice} />}
+      {error && !modalOpen && <InlineNotice message={error} tone="error" />}
+      {loading ? <LoadingState label="Loading announcements…" /> : error && items.length === 0 ? <ErrorState message={error} onRetry={() => void load()} /> : items.length === 0 ? <EmptyState title="No announcements" message="There are no notices for your role right now." /> : (
+        <div className="space-y-4">
+          {items.map((item) => (
+            <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-start justify-between gap-4">
+                <div><h2 className="text-lg font-black">{item.title}</h2><div className="mt-2 flex flex-wrap gap-2">{item.priority && <Badge>{item.priority}</Badge>}{item.category && <Badge>{item.category}</Badge>}</div></div>
+                {canManage && <button type="button" aria-label={`Delete ${item.title}`} title="Teachers can delete only announcements they created" onClick={() => void remove(item)} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"><Trash2 className="h-4 w-4" /></button>}
               </div>
-              
-              {/* Background Glow */}
-              <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/5 rounded-full blur-3xl -mr-16 -mt-16 group-hover:scale-150 transition-all duration-700"></div>
-            </motion.div>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600 dark:text-slate-300">{item.content || item.message}</p>
+              {item.attachmentUrl && <ProtectedFileButton fileUrl={item.attachmentUrl} />}
+              {(item.publishedAt || item.createdAt) && <p className="mt-4 text-xs text-slate-400">{formatDate(item.publishedAt || item.createdAt || "")}</p>}
+            </article>
           ))}
-        </AnimatePresence>
-      </div>
+        </div>
+      )}
 
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="announcement-dialog-title">
+          <form onSubmit={create} className="w-full max-w-xl space-y-4 rounded-3xl bg-white p-7 dark:bg-slate-900">
+            <div className="flex items-center justify-between"><h2 id="announcement-dialog-title" className="text-xl font-black">Publish announcement</h2><button type="button" aria-label="Close" onClick={() => setModalOpen(false)}><X className="h-5 w-5" /></button></div>
+            <Field label="Title"><input required maxLength={160} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} className="field" /></Field>
+            <Field label="Message"><textarea required maxLength={10_000} rows={6} value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} className="field" /></Field>
+            <div className="grid gap-4 sm:grid-cols-2"><Field label="Priority"><select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value as typeof form.priority })} className="field"><option>LOW</option><option>NORMAL</option><option>HIGH</option><option>URGENT</option></select></Field><Field label="Category (optional)"><input maxLength={80} value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} className="field" /></Field></div>
+            <fieldset><legend className="text-sm font-semibold">Visible to</legend><div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">{ALL_ROLES.map((audience) => <label key={audience} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold dark:border-slate-700"><input type="checkbox" checked={form.visibleTo.includes(audience)} onChange={() => toggleAudience(audience)} />{audience}</label>)}</div></fieldset>
+            {error && <InlineNotice message={error} tone="error" />}
+            <button disabled={saving} className="primary-button">{saving ? "Publishing…" : "Publish"}</button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="grid gap-1 text-sm font-semibold">{label}{children}</label>; }
+function Badge({ children }: { children: React.ReactNode }) { return <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300">{children}</span>; }
+function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); }
+function messageOf(error: unknown, fallback: string) { return error instanceof Error ? error.message : fallback; }

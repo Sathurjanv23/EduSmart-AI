@@ -10,6 +10,10 @@ import java.util.List;
 public interface AssignmentRepository extends MongoRepository<Assignment, String> {
     List<Assignment> findByClassId(String classId);
 
+    List<Assignment> findByClassIdAndStatus(String classId, String status);
+
+    List<Assignment> findByClassIdInAndStatus(List<String> classIds, String status);
+
     List<Assignment> findBySubject(String subject);
 
     List<Assignment> findByStatus(String status);

@@ -2,18 +2,19 @@ package com.sms.backend.controller;
 
 import com.sms.backend.model.Activity;
 import com.sms.backend.service.ActivityService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/activities")
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001"})
 public class ActivityController {
 
-    @Autowired
-    private ActivityService activityService;
+    private final ActivityService activityService;
+
+    public ActivityController(ActivityService activityService) {
+        this.activityService = activityService;
+    }
 
     @PostMapping
     public Activity addActivity(@RequestBody Activity activity) {

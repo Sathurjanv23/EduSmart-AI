@@ -1,101 +1,60 @@
 package com.sms.backend.controller;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.*;
+import com.sms.backend.dto.FileUploadResponse;
+import com.sms.backend.exception.ApiException;
+import com.sms.backend.service.FileStorageService;
 
 @RestController
 @RequestMapping("/api/upload")
-@CrossOrigin(origins = "*")
 public class FileUploadController {
+    private final FileStorageService fileStorageService;
+    private final int maxFilesPerRequest;
 
-    @Value("${file.upload.dir:./uploads/}")
-    private String uploadDir;
-
-    @Value("${file.upload.max-size:10485760}")
-    private long maxFileSize;
+    public FileUploadController(
+            FileStorageService fileStorageService,
+            @Value("${file.upload.max-files-per-request:10}") int maxFilesPerRequest) {
+        if (maxFilesPerRequest <= 0) {
+            throw new IllegalStateException("Upload file-count limit must be positive");
+        }
+        this.fileStorageService = fileStorageService;
+        this.maxFilesPerRequest = maxFilesPerRequest;
+    }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> uploadFile(@RequestParam("file") MultipartFile file) {
-        try {
-            if (file.isEmpty()) {
-                return ResponseEntity.badRequest()
-                        .body(Map.of("error", "File is empty"));
-            }
-
-            if (file.getSize() > maxFileSize) {
-                return ResponseEntity.badRequest()
-                        .body(Map.of("error", "File size exceeds limit"));
-            }
-
-            String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
-            Path uploadPath = Paths.get(uploadDir);
-            Files.createDirectories(uploadPath);
-
-            Path filePath = uploadPath.resolve(fileName);
-            Files.write(filePath, file.getBytes());
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("fileName", fileName);
-            response.put("fileUrl", "/uploads/" + fileName);
-            response.put("size", file.getSize());
-            response.put("uploadedAt", new Date());
-
-            return ResponseEntity.ok(response);
-
-        } catch (IOException e) {
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "File upload failed: " + e.getMessage()));
-        }
+    public FileUploadResponse upload(@RequestParam("file") MultipartFile file) {
+        return fileStorageService.store(file);
     }
 
     @PostMapping("/multiple")
-    public ResponseEntity<Map<String, Object>> uploadMultipleFiles(@RequestParam("files") MultipartFile[] files) {
-        List<Map<String, String>> uploadedFiles = new ArrayList<>();
-
-        for (MultipartFile file : files) {
-            try {
-                if (!file.isEmpty() && file.getSize() <= maxFileSize) {
-                    String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
-                    Path uploadPath = Paths.get(uploadDir);
-                    Files.createDirectories(uploadPath);
-
-                    Path filePath = uploadPath.resolve(fileName);
-                    Files.write(filePath, file.getBytes());
-
-                    Map<String, String> fileInfo = new HashMap<>();
-                    fileInfo.put("fileName", fileName);
-                    fileInfo.put("fileUrl", "/uploads/" + fileName);
-                    uploadedFiles.add(fileInfo);
-                }
-            } catch (IOException e) {
-                // Skip file on error
-            }
+    public Map<String, Object> uploadMultiple(@RequestParam("files") MultipartFile[] files) {
+        if (files == null || files.length == 0) {
+            throw ApiException.badRequest("EMPTY_UPLOAD", "At least one file is required");
         }
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("uploadedFiles", uploadedFiles);
-        response.put("totalUploaded", uploadedFiles.size());
-        return ResponseEntity.ok(response);
+        if (files.length > maxFilesPerRequest) {
+            throw ApiException.badRequest(
+                    "TOO_MANY_FILES",
+                    "Too many files in one upload request");
+        }
+        List<FileUploadResponse> uploaded = Arrays.stream(files).map(fileStorageService::store).toList();
+        return Map.of("uploadedFiles", uploaded, "totalUploaded", uploaded.size());
     }
 
-    @DeleteMapping("/{fileName}")
-    public ResponseEntity<Map<String, String>> deleteFile(@PathVariable String fileName) {
-        try {
-            Path filePath = Paths.get(uploadDir).resolve(fileName);
-            Files.deleteIfExists(filePath);
-            return ResponseEntity.ok(Map.of("message", "File deleted successfully"));
-        } catch (IOException e) {
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "File deletion failed"));
-        }
+    @DeleteMapping("/{fileName:.+}")
+    public Map<String, String> delete(@PathVariable String fileName) {
+        fileStorageService.delete(fileName);
+        return Map.of("message", "File deleted successfully");
     }
 }

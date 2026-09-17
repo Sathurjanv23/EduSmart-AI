@@ -1,59 +1,94 @@
 package com.sms.backend.controller;
 
+import java.net.URI;
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.sms.backend.exception.ApiException;
 import com.sms.backend.model.FeeStructure;
 import com.sms.backend.repository.FeeStructureRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.Optional;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/fee-structure")
-@CrossOrigin(origins = "*")
 public class FeeStructureController {
+    private final FeeStructureRepository feeStructureRepository;
 
-    @Autowired
-    private FeeStructureRepository feeStructureRepository;
+    public FeeStructureController(FeeStructureRepository feeStructureRepository) {
+        this.feeStructureRepository = feeStructureRepository;
+    }
 
     @PostMapping
-    public ResponseEntity<FeeStructure> createFeeStructure(@RequestBody FeeStructure feeStructure) {
-        return ResponseEntity.ok(feeStructureRepository.save(feeStructure));
+    public ResponseEntity<FeeStructure> create(@Valid @RequestBody FeeStructure feeStructure) {
+        prepare(feeStructure);
+        FeeStructure saved = feeStructureRepository.save(feeStructure);
+        return ResponseEntity.created(URI.create("/api/fee-structure/" + saved.getId())).body(saved);
     }
 
     @GetMapping
-    public ResponseEntity<List<FeeStructure>> getAllFeeStructures() {
-        return ResponseEntity.ok(feeStructureRepository.findAll());
+    public List<FeeStructure> all() {
+        return feeStructureRepository.findAll();
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<FeeStructure> getFeeStructureById(@PathVariable String id) {
-        Optional<FeeStructure> feeStructure = feeStructureRepository.findById(id);
-        return feeStructure.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    public FeeStructure byId(@PathVariable String id) {
+        return feeStructureRepository.findById(id).orElseThrow(() -> ApiException.notFound("Fee structure"));
     }
 
     @GetMapping("/class/{className}/year/{academicYear}")
-    public ResponseEntity<FeeStructure> getFeeStructureByClassAndYear(
-            @PathVariable String className,
-            @PathVariable String academicYear) {
+    public FeeStructure byClassAndYear(@PathVariable String className, @PathVariable String academicYear) {
         FeeStructure feeStructure = feeStructureRepository.findByClassNameAndAcademicYear(className, academicYear);
-        return feeStructure != null ? ResponseEntity.ok(feeStructure) : ResponseEntity.notFound().build();
+        if (feeStructure == null) {
+            throw ApiException.notFound("Fee structure");
+        }
+        return feeStructure;
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<FeeStructure> updateFeeStructure(@PathVariable String id, @RequestBody FeeStructure feeStructure) {
-        Optional<FeeStructure> optional = feeStructureRepository.findById(id);
-        if (optional.isPresent()) {
-            feeStructure.setId(id);
-            return ResponseEntity.ok(feeStructureRepository.save(feeStructure));
-        }
-        return ResponseEntity.notFound().build();
+    public FeeStructure update(@PathVariable String id, @Valid @RequestBody FeeStructure request) {
+        FeeStructure existing = feeStructureRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Fee structure"));
+        request.setId(id);
+        request.setCreatedAt(existing.getCreatedAt());
+        prepare(request);
+        return feeStructureRepository.save(request);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteFeeStructure(@PathVariable String id) {
-        feeStructureRepository.deleteById(id);
-        return ResponseEntity.ok("Fee structure deleted successfully");
+    public ResponseEntity<Void> delete(@PathVariable String id) {
+        FeeStructure existing = feeStructureRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Fee structure"));
+        feeStructureRepository.delete(existing);
+        return ResponseEntity.noContent().build();
+    }
+
+    private void prepare(FeeStructure structure) {
+        structure.setClassName(structure.getClassName().trim());
+        structure.setAcademicYear(structure.getAcademicYear().trim());
+        structure.setTotalFee(sum(
+                structure.getTuitionFee(), structure.getLabFee(), structure.getSportsFee(),
+                structure.getTransportFee(), structure.getOtherFee()));
+        structure.setUpdatedAt(LocalDateTime.now());
+    }
+
+    private double sum(Double... values) {
+        double total = 0;
+        for (Double value : values) {
+            if (value != null) {
+                total += value;
+            }
+        }
+        return total;
     }
 }

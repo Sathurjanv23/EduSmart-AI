@@ -116,7 +116,7 @@ export default function HomePage() {
               </div>
 
               <h1 className="animate-title-reveal bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 bg-clip-text text-5xl font-extrabold tracking-tight text-transparent md:text-7xl">
-                EduSmart
+                CampusCore
               </h1>
 
               <p className="animate-fade-up mt-4 text-xs uppercase tracking-[0.55em] text-slate-400 md:text-sm">
@@ -356,7 +356,7 @@ export default function HomePage() {
               className="object-contain"
             />
             <div>
-              <h1 className="text-2xl font-bold text-emerald-400">EduSmart</h1>
+              <h1 className="text-2xl font-bold text-emerald-400">CampusCore</h1>
               <p className="text-xs text-slate-300">Modern School Management System</p>
             </div>
           </div>
@@ -500,7 +500,7 @@ export default function HomePage() {
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
           <Link
-            href="/admin"
+            href="/login"
             className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur-xl transition hover:-translate-y-1 hover:bg-white/15"
           >
             <h3 className="text-2xl font-bold text-indigo-300">Admin Portal</h3>
@@ -575,7 +575,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="mt-10 border-t border-white/10 bg-white/5">
         <div className="mx-auto max-w-7xl px-6 py-6 text-center text-sm text-slate-400">
-          © 2026 EduSmart · Modern School Management System
+          © 2026 CampusCore · Secure School Management
         </div>
       </footer>
     </div>

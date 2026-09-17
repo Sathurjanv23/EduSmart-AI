@@ -3,6 +3,7 @@ package com.sms.backend.model;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -13,11 +14,13 @@ import org.springframework.data.mongodb.core.mapping.Document;
  *  - FORGOT    : password reset (not OTP-based, uses token)
  */
 @Document(collection = "otp_store")
+@CompoundIndex(name = "otp_email_purpose_unique", def = "{'email': 1, 'purpose': 1}", unique = true)
 public class OtpStore {
 
     @Id
     private String id;
 
+    @Indexed
     private String email;
     private String hashedOtp;        // BCrypt-hashed 6-digit OTP
     @Indexed(expireAfterSeconds = 0)

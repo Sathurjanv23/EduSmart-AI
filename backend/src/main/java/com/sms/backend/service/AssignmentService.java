@@ -1,73 +1,106 @@
 package com.sms.backend.service;
 
-import com.sms.backend.model.Assignment;
-import com.sms.backend.dto.AssignmentDTO;
-import com.sms.backend.repository.AssignmentRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.Objects;
+import com.sms.backend.dto.AssignmentDTO;
+import com.sms.backend.exception.ApiException;
+import com.sms.backend.model.Assignment;
+import com.sms.backend.model.Student;
+import com.sms.backend.model.TeacherProfile;
+import com.sms.backend.repository.AssignmentRepository;
+import com.sms.backend.repository.TeacherProfileRepository;
+import com.sms.backend.security.AcademicAccessService;
+import com.sms.backend.security.UploadReferenceValidator;
 
 @Service
 public class AssignmentService {
+    private final AssignmentRepository assignmentRepository;
+    private final TeacherProfileRepository teacherProfileRepository;
+    private final AcademicAccessService accessService;
 
-    @Autowired
-    private AssignmentRepository assignmentRepository;
+    public AssignmentService(
+            AssignmentRepository assignmentRepository,
+            TeacherProfileRepository teacherProfileRepository,
+            AcademicAccessService accessService) {
+        this.assignmentRepository = assignmentRepository;
+        this.teacherProfileRepository = teacherProfileRepository;
+        this.accessService = accessService;
+    }
 
-    public Assignment createAssignment(AssignmentDTO dto, String teacherId) {
+    public Assignment createAssignment(AssignmentDTO dto, String createdBy) {
         Assignment assignment = new Assignment();
-        assignment.setTitle(dto.getTitle());
-        assignment.setDescription(dto.getDescription());
-        assignment.setClassId(dto.getClassId());
-        assignment.setSubject(dto.getSubject());
-        assignment.setCreatedBy(teacherId);
-        assignment.setDueDate(dto.getDueDate());
-        assignment.setMaxMarks(dto.getMaxMarks());
-        assignment.setFileUrl(dto.getFileUrl());
-        assignment.setAttachmentUrl(dto.getAttachmentUrl());
+        apply(assignment, dto);
+        assignment.setCreatedBy(createdBy);
         assignment.setStatus("ACTIVE");
         assignment.setCreatedAt(LocalDateTime.now());
         assignment.setUpdatedAt(LocalDateTime.now());
         return assignmentRepository.save(assignment);
     }
 
+    public List<Assignment> getVisibleAssignments(Authentication authentication) {
+        if (accessService.hasAuthority(authentication, "ADMIN")) {
+            return assignmentRepository.findAll();
+        }
+        if (accessService.hasAuthority(authentication, "TEACHER")) {
+            TeacherProfile profile = teacherProfileRepository.findByEmail(authentication.getName())
+                    .orElseThrow(() -> ApiException.forbidden("Teacher profile and class assignments are required"));
+            List<String> classIds = profile.getAssignedClassIds() == null
+                    ? List.of() : profile.getAssignedClassIds();
+            List<String> subjects = profile.getAssignedSubjects() == null
+                    ? List.of() : profile.getAssignedSubjects();
+            return assignmentRepository.findByClassIdInAndStatus(classIds, "ACTIVE").stream()
+                    .filter(assignment -> subjects.stream()
+                            .anyMatch(subject -> subject.equalsIgnoreCase(assignment.getSubject())))
+                    .toList();
+        }
+        if (accessService.hasAuthority(authentication, "STUDENT")) {
+            Student student = accessService.currentStudent(authentication);
+            return assignmentRepository.findByClassIdAndStatus(student.getStudentClass(), "ACTIVE");
+        }
+        Map<String, Assignment> unique = new LinkedHashMap<>();
+        accessService.currentParentChildren(authentication).forEach(student ->
+                assignmentRepository.findByClassIdAndStatus(student.getStudentClass(), "ACTIVE")
+                        .forEach(assignment -> unique.put(assignment.getId(), assignment)));
+        return List.copyOf(unique.values());
+    }
+
+    public List<Assignment> getAvailableForStudent(Student student) {
+        return assignmentRepository.findByClassIdAndStatus(student.getStudentClass(), "ACTIVE");
+    }
+
     public List<Assignment> getAssignmentsByClass(String classId) {
         return assignmentRepository.findByClassId(classId);
     }
 
-    public List<Assignment> getAssignmentsBySubject(String subject) {
-        return assignmentRepository.findBySubject(subject);
-    }
-
-    public Assignment getAssignmentById(String id) {
-        String assignmentId = Objects.requireNonNull(id, "id must not be null");
-        return assignmentRepository.findById(assignmentId).orElse(null);
+    public Assignment requireById(String id) {
+        return assignmentRepository.findById(id).orElseThrow(() -> ApiException.notFound("Assignment"));
     }
 
     public Assignment updateAssignment(String id, AssignmentDTO dto) {
-        String assignmentId = Objects.requireNonNull(id, "id must not be null");
-        Optional<Assignment> optional = assignmentRepository.findById(assignmentId);
-        if (optional.isPresent()) {
-            Assignment assignment = optional.get();
-            assignment.setTitle(dto.getTitle());
-            assignment.setDescription(dto.getDescription());
-            assignment.setDueDate(dto.getDueDate());
-            assignment.setMaxMarks(dto.getMaxMarks());
-            assignment.setUpdatedAt(LocalDateTime.now());
-            return assignmentRepository.save(assignment);
-        }
-        return null;
+        Assignment assignment = requireById(id);
+        apply(assignment, dto);
+        assignment.setUpdatedAt(LocalDateTime.now());
+        return assignmentRepository.save(assignment);
     }
 
     public void deleteAssignment(String id) {
-        String assignmentId = Objects.requireNonNull(id, "id must not be null");
-        assignmentRepository.deleteById(assignmentId);
+        assignmentRepository.delete(requireById(id));
     }
 
-    public List<Assignment> getAssignmentsByTeacher(String teacherId) {
-        return assignmentRepository.findByCreatedBy(teacherId);
+    private void apply(Assignment assignment, AssignmentDTO dto) {
+        assignment.setTitle(dto.getTitle().trim());
+        assignment.setDescription(dto.getDescription().trim());
+        assignment.setClassId(dto.getClassId().trim());
+        assignment.setSubject(dto.getSubject().trim());
+        assignment.setDueDate(dto.getDueDate());
+        assignment.setMaxMarks(dto.getMaxMarks());
+        assignment.setFileUrl(UploadReferenceValidator.normalizeOptional(dto.getFileUrl()));
+        assignment.setAttachmentUrl(UploadReferenceValidator.normalizeOptional(dto.getAttachmentUrl()));
     }
 }

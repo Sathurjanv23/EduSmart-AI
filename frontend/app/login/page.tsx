@@ -1,469 +1,867 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import {
+  FormEvent,
+  KeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { 
-  loginUser, 
-  signupUser, 
-  verifyOtp, 
-  resendOtp, 
-  forgotPassword,
-  saveToken 
-} from "../services/authService";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  GraduationCap, 
-  Presentation, 
-  Users, 
-  Shield, 
-  School, 
-  ArrowLeft, 
-  Mail, 
-  Lock, 
-  User, 
-  ChevronRight,
-  RefreshCw,
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowLeft,
+  CheckCircle2,
   Clock,
-  CheckCircle2
-} from 'lucide-react';
-import { useRole, Role } from "@/components/RoleProvider";
+  GraduationCap,
+  Lock,
+  Mail,
+  RefreshCw,
+  School,
+  ShieldCheck,
+  User,
+} from "lucide-react";
 
-type AuthView = "login" | "signup" | "otp" | "forgot" | "success";
+import {
+  AuthResponse,
+  forgotPassword,
+  loginUser,
+  resendOtp,
+  signupUser,
+  verifyOtp,
+} from "@/app/services/authService";
+
+import { getApiErrorCode } from "@/app/services/apiService";
+import {
+  dashboardForRole,
+  isSafeRoleReturnTo,
+} from "@/app/lib/authRoutes";
+
+import { useAuth } from "@/components/AuthProvider";
+
+type View = "login" | "signup" | "otp" | "forgot" | "success";
+type OtpPurpose = "REGISTER" | "LOGIN_2FA";
+type PublicRole = "STUDENT" | "PARENT";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setRole } = useRole();
+  const { establishSession, status, user } = useAuth();
 
-  // Navigation state
-  const [view, setView] = useState<AuthView>("login");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  // Form states
+  const [view, setView] = useState<View>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [role, setRoleLocal] = useState("STUDENT");
+  const [role, setRole] = useState<PublicRole>("STUDENT");
 
-  // OTP state
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [otpPurpose, setOtpPurpose] = useState<"REGISTER" | "LOGIN_2FA">("LOGIN_2FA");
-  const [resendTimer, setResendTimer] = useState(0);
-  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [otpPurpose, setOtpPurpose] =
+    useState<OtpPurpose>("LOGIN_2FA");
 
-  // Timer logic for resend OTP
+  const [resendSeconds, setResendSeconds] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (resendTimer > 0) {
-      timer = setInterval(() => {
-        setResendTimer((prev) => prev - 1);
-      }, 1000);
+    if (status === "authenticated" && user) {
+      router.replace(`/${user.role.toLowerCase()}/dashboard`);
     }
-    return () => clearInterval(timer);
-  }, [resendTimer]);
+  }, [router, status, user]);
 
-  // Handle Login (Step 1)
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+  useEffect(() => {
+    const mode = new URLSearchParams(window.location.search).get("mode");
+
+    if (mode === "signup") {
+      setView("signup");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+
+    const timer = window.setInterval(() => {
+      setResendSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [resendSeconds]);
+
+  const completeLogin = async (response: AuthResponse) => {
+    const authenticatedUser = await establishSession(response);
+
+    const requested = new URLSearchParams(
+      window.location.search
+    ).get("returnTo");
+
+    router.replace(
+      isSafeRoleReturnTo(authenticatedUser.role, requested)
+        ? requested
+        : dashboardForRole(authenticatedUser.role)
+    );
+  };
+
+  const submitLogin = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
     setLoading(true);
+    setError("");
 
     try {
-      const data = await loginUser({ email, password });
-      
-      if (data.message === "OTP_SENT") {
+      const response = await loginUser({
+        email,
+        password,
+      });
+
+      if (response.message === "OTP_SENT") {
         setOtpPurpose("LOGIN_2FA");
         setView("otp");
-        setResendTimer(30);
+        setResendSeconds(30);
       } else {
-        // Direct login fallback (if 2FA was disabled for some reason)
-        finalizeLogin(data);
+        await completeLogin(response);
       }
-    } catch (err: any) {
-      if (err.message === "EMAIL_NOT_VERIFIED") {
+    } catch (unknownError: unknown) {
+      if (
+        getApiErrorCode(unknownError) === "EMAIL_NOT_VERIFIED" ||
+        messageOf(unknownError) === "EMAIL_NOT_VERIFIED"
+      ) {
         setOtpPurpose("REGISTER");
         setView("otp");
-        setResendTimer(30);
+        setResendSeconds(30);
       } else {
-        setError(err.message || "Invalid credentials");
+        setError(
+          messageOf(unknownError, "Invalid email or password.")
+        );
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle Signup
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+  const submitSignup = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
     setLoading(true);
+    setError("");
 
     try {
-      const data = await signupUser({ 
-        name, 
-        email, 
-        password, 
-        role 
+      const passwordError = getPasswordValidationError(password);
+      if (passwordError) {
+        setError(passwordError);
+        return;
+      }
+
+      const response = await signupUser({
+        name,
+        email,
+        password,
+        role,
       });
-      
-      if (data.message === "OTP_SENT") {
+
+      if (response.message === "OTP_SENT") {
         setOtpPurpose("REGISTER");
         setView("otp");
-        setResendTimer(30);
+        setResendSeconds(30);
+      } else {
+        setError(
+          "Check your email to complete registration."
+        );
       }
-    } catch (err: any) {
-      setError(err.message || "Signup failed");
+    } catch (unknownError: unknown) {
+      setError(
+        messageOf(unknownError, "Registration failed.")
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle OTP Verification
-  const handleVerifyOtp = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    const otpString = otp.join("");
-    if (otpString.length !== 6) return;
+  const submitOtp = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
 
-    setError("");
+    if (otp.some((digit) => !digit)) return;
+
     setLoading(true);
+    setError("");
 
     try {
-      const data = await verifyOtp({ 
-        email, 
-        otp: otpString, 
-        purpose: otpPurpose 
+      const response = await verifyOtp({
+        email,
+        otp: otp.join(""),
+        purpose: otpPurpose,
       });
-      
-      finalizeLogin(data);
-    } catch (err: any) {
-      setError(err.message || "Invalid OTP code");
+
+      await completeLogin(response);
+    } catch (unknownError: unknown) {
+      setError(
+        messageOf(
+          unknownError,
+          "The verification code is invalid."
+        )
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle Resend OTP
-  const handleResend = async () => {
-    if (resendTimer > 0) return;
+  const resend = async () => {
+    if (resendSeconds) return;
+
     setError("");
+
     try {
-      await resendOtp({ email, purpose: otpPurpose });
-      setResendTimer(30);
+      await resendOtp({
+        email,
+        purpose: otpPurpose,
+      });
+
       setOtp(["", "", "", "", "", ""]);
-      otpInputRefs.current[0]?.focus();
-    } catch (err: any) {
-      setError(err.message || "Failed to resend OTP");
+      setResendSeconds(30);
+
+      otpRefs.current[0]?.focus();
+    } catch (unknownError: unknown) {
+      setError(
+        messageOf(
+          unknownError,
+          "Could not resend the code."
+        )
+      );
     }
   };
 
-  // Handle Forgot Password
-  const handleForgot = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+  const submitForgot = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
     setLoading(true);
+    setError("");
 
     try {
       await forgotPassword(email);
       setView("success");
-    } catch (err: any) {
-      setError(err.message || "Failed to send reset link");
+    } catch (unknownError: unknown) {
+      setError(
+        messageOf(
+          unknownError,
+          "Could not submit the password reset request."
+        )
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // Common finalize logic
-  const finalizeLogin = (data: any) => {
-    saveToken(data.token || "");
-    localStorage.setItem("auth-user", JSON.stringify(data.user));
-    const role = data.user.role.toLowerCase();
-    setRole(data.user.role as Role);
-    router.push(`/${role}/dashboard`);
-  };
+  const changeOtp = (
+    index: number,
+    input: string
+  ) => {
+    const digit = input
+      .replace(/\D/g, "")
+      .slice(-1);
 
-  // OTP Input logic
-  const handleOtpChange = (index: number, value: string) => {
-    if (isNaN(Number(value))) return;
-    
-    const newOtp = [...otp];
-    newOtp[index] = value.slice(-1);
-    setOtp(newOtp);
+    setOtp((current) =>
+      current.map((value, position) =>
+        position === index ? digit : value
+      )
+    );
 
-    // Auto focus next
-    if (value && index < 5) {
-      otpInputRefs.current[index + 1]?.focus();
+    if (digit && index < 5) {
+      otpRefs.current[index + 1]?.focus();
     }
   };
 
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0) {
-      otpInputRefs.current[index - 1]?.focus();
+  const otpKeyDown = (
+    index: number,
+    event: KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (
+      event.key === "Backspace" &&
+      !otp[index] &&
+      index > 0
+    ) {
+      otpRefs.current[index - 1]?.focus();
     }
-  };
-
-  // Anti-Gravity Animations
-  const floatingVariant = {
-    animate: {
-      y: [0, -10, 0],
-      transition: { duration: 4, repeat: Infinity, ease: "easeInOut" }
-    }
-  };
-
-  const pageTransition = {
-    initial: { opacity: 0, scale: 0.95, y: 10 },
-    animate: { opacity: 1, scale: 1, y: 0 },
-    exit: { opacity: 0, scale: 1.05, y: -10 },
-    transition: { type: "spring", stiffness: 300, damping: 25 }
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors duration-700">
-      
-      {/* Dynamic Background */}
-      <motion.div 
-        animate={{ rotate: 360, scale: [1, 1.1, 1] }}
-        transition={{ duration: 180, repeat: Infinity, ease: "linear" }}
-        className="absolute -top-[15%] -left-[10%] w-[80vw] h-[80vw] rounded-full bg-gradient-to-br from-blue-500/10 to-indigo-500/10 blur-[120px] dark:from-blue-900/20 dark:to-indigo-900/20"
-      />
-      <motion.div 
-        animate={{ rotate: -360, scale: [1, 1.2, 1] }}
-        transition={{ duration: 220, repeat: Infinity, ease: "linear" }}
-        className="absolute -bottom-[15%] -right-[10%] w-[70vw] h-[70vw] rounded-full bg-gradient-to-tl from-emerald-500/10 to-cyan-500/10 blur-[100px] dark:from-emerald-900/15 dark:to-cyan-900/15"
-      />
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4 py-10 dark:bg-slate-950">
+      <div className="absolute -left-40 -top-40 h-96 w-96 rounded-full bg-blue-500/15 blur-3xl" />
 
-      <motion.div 
-        variants={floatingVariant}
-        animate="animate"
-        className="relative z-10 w-full max-w-[440px] px-6"
-      >
-        <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-3xl border border-white dark:border-slate-800/50 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] dark:shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)] rounded-[3rem] p-8 sm:p-12 transition-all duration-500">
-          
-          {/* Brand Header */}
-          <div className="flex flex-col items-center mb-10">
-            <motion.div 
-              whileHover={{ rotate: 180, scale: 1.1 }}
-              className="w-16 h-16 rounded-[1.25rem] bg-gradient-to-br from-emerald-500 to-teal-700 text-white flex items-center justify-center mb-4 shadow-2xl shadow-emerald-500/40"
-            >
-              <School className="w-8 h-8" />
-            </motion.div>
-            <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">EduSmart</h1>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="h-px w-4 bg-slate-300 dark:bg-slate-700"></span>
-              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 tracking-[0.2em] uppercase">Anti-Gravity Edition</p>
-              <span className="h-px w-4 bg-slate-300 dark:bg-slate-700"></span>
+      <div className="absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-purple-500/15 blur-3xl" />
+
+      <div className="relative grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900 lg:grid-cols-2">
+
+        {/* LEFT PANEL */}
+        <section className="hidden bg-gradient-to-br from-blue-700 to-indigo-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
+                <School className="h-6 w-6" />
+              </span>
+
+              <div>
+                <h1 className="text-2xl font-black">
+                  CampusCore
+                </h1>
+
+                <p className="text-xs uppercase tracking-widest text-blue-200">
+                  School Management
+                </p>
+              </div>
             </div>
+
+            <h2 className="mt-16 text-4xl font-black leading-tight">
+              One secure portal for your school community.
+            </h2>
+
+            <p className="mt-4 text-blue-100">
+              Role-based access for administrators,
+              teachers, students, and parents.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 text-sm text-blue-100">
+            <ShieldCheck className="h-5 w-5" />
+            JWT authentication with email verification
+          </div>
+        </section>
+
+        {/* RIGHT PANEL */}
+        <section className="p-7 sm:p-10">
+
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <GraduationCap className="h-7 w-7 text-blue-600" />
+            <span className="text-xl font-black">
+              CampusCore
+            </span>
           </div>
 
           <AnimatePresence mode="wait">
-            {/* LOGIN VIEW */}
-            {view === "login" && (
-              <motion.div key="login" {...pageTransition}>
-                <form className="space-y-4" onSubmit={handleLogin}>
-                  <div className="space-y-1">
-                    <div className="relative">
-                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type="email"
-                        required
-                        placeholder="Email Address"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full rounded-2xl border-none bg-slate-100/50 dark:bg-slate-800/50 pl-11 pr-4 py-4 text-slate-900 dark:text-white placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-                      />
-                    </div>
-                  </div>
+            <motion.div
+              key={view}
+              initial={{
+                opacity: 0,
+                y: 8,
+              }}
+              animate={{
+                opacity: 1,
+                y: 0,
+              }}
+              exit={{
+                opacity: 0,
+                y: -8,
+              }}
+            >
 
-                  <div className="space-y-1">
-                    <div className="relative">
-                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type="password"
-                        required
-                        placeholder="Password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full rounded-2xl border-none bg-slate-100/50 dark:bg-slate-800/50 pl-11 pr-4 py-4 text-slate-900 dark:text-white placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-                      />
-                    </div>
-                  </div>
+              {/* LOGIN */}
+              {view === "login" && (
+                <>
+                  <Title
+                    title="Welcome back"
+                    subtitle="Sign in with your school account."
+                  />
 
-                  {error && (
-                    <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs font-semibold text-rose-500 px-1">
-                      {error}
-                    </motion.p>
-                  )}
-
-                  <motion.button
-                    whileHover={{ y: -2 }}
-                    whileTap={{ scale: 0.98 }}
-                    disabled={loading}
-                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold py-4 rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all mt-6"
+                  <form
+                    onSubmit={submitLogin}
+                    className="space-y-4"
                   >
-                    {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : "Enter Dashboard"}
-                    {!loading && <ChevronRight className="w-4 h-4" />}
-                  </motion.button>
-                </form>
-
-                <div className="mt-8 flex items-center justify-between px-2">
-                  <button onClick={() => setView("signup")} className="text-sm font-bold text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                    Create Account
-                  </button>
-                  <button onClick={() => setView("forgot")} className="text-sm font-bold text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                    Reset Password
-                  </button>
-                </div>
-              </motion.div>
-            )}
-
-            {/* SIGNUP VIEW */}
-            {view === "signup" && (
-              <motion.div key="signup" {...pageTransition}>
-                <button onClick={() => setView("login")} className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white mb-6 transition-colors">
-                  <ArrowLeft className="w-3 h-3" /> BACK
-                </button>
-                <form className="space-y-4" onSubmit={handleSignup}>
-                  <div className="relative">
-                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type="text" required placeholder="Full Name" value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-2xl border-none bg-slate-100/50 dark:bg-slate-800/50 pl-11 pr-4 py-4 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
-                  </div>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-2xl border-none bg-slate-100/50 dark:bg-slate-800/50 pl-11 pr-4 py-4 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
-                  </div>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-2xl border-none bg-slate-100/50 dark:bg-slate-800/50 pl-11 pr-4 py-4 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
-                  </div>
-                  <div className="relative">
-                    <select value={role} onChange={(e) => setRoleLocal(e.target.value)} className="w-full rounded-2xl border-none bg-slate-100/50 dark:bg-slate-800/50 px-5 py-4 text-slate-900 dark:text-white appearance-none focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium">
-                      <option value="STUDENT">👨‍🎓 Student</option>
-                      <option value="TEACHER">👩‍🏫 Teacher</option>
-                      <option value="PARENT">👪 Parent</option>
-                      <option value="ADMIN">👑 Admin</option>
-                    </select>
-                  </div>
-
-                  {error && <p className="text-xs font-semibold text-rose-500 px-1">{error}</p>}
-
-                  <motion.button whileTap={{ scale: 0.98 }} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-2xl shadow-xl shadow-blue-500/20 transition-all mt-6">
-                    {loading ? <RefreshCw className="w-5 h-5 animate-spin mx-auto" /> : "Sign Up"}
-                  </motion.button>
-                </form>
-              </motion.div>
-            )}
-
-            {/* OTP VERIFICATION VIEW */}
-            {view === "otp" && (
-              <motion.div key="otp" {...pageTransition} className="text-center">
-                <button onClick={() => setView("login")} className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white mb-6 transition-colors mx-auto">
-                  <ArrowLeft className="w-3 h-3" /> BACK
-                </button>
-                <div className="mb-6">
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white">Verify Account</h2>
-                  <p className="text-xs text-slate-500 mt-1">We sent a 6-digit code to <b>{email}</b></p>
-                </div>
-
-                <div className="flex justify-between gap-2 mb-8">
-                  {otp.map((digit, idx) => (
-                    <input
-                      key={idx}
-                      ref={(el) => (otpInputRefs.current[idx] = el)}
-                      type="text"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) => handleOtpChange(idx, e.target.value)}
-                      onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                      className="w-12 h-14 rounded-xl bg-slate-100 dark:bg-slate-800 text-center text-xl font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    <EmailField
+                      value={email}
+                      setValue={setEmail}
                     />
-                  ))}
-                </div>
 
-                {error && <p className="text-xs font-semibold text-rose-500 mb-4">{error}</p>}
+                    <PasswordField
+                      value={password}
+                      setValue={setPassword}
+                      autoComplete="current-password"
+                    />
 
-                <motion.button 
-                  whileTap={{ scale: 0.98 }} 
-                  disabled={loading || otp.join("").length < 6}
-                  onClick={() => handleVerifyOtp()}
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-2xl shadow-xl shadow-blue-500/20 disabled:opacity-50 transition-all mb-4"
-                >
-                  {loading ? <RefreshCw className="w-5 h-5 animate-spin mx-auto" /> : "Verify & Continue"}
-                </motion.button>
+                    {error && (
+                      <ErrorMessage message={error} />
+                    )}
 
-                <div className="flex items-center justify-center gap-2 text-xs font-bold">
-                  <span className="text-slate-400">Didn't get code?</span>
-                  {resendTimer > 0 ? (
-                    <span className="text-blue-500 flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> Resend in {resendTimer}s
-                    </span>
-                  ) : (
-                    <button onClick={handleResend} className="text-blue-600 hover:underline">Resend Now</button>
-                  )}
-                </div>
-              </motion.div>
-            )}
+                    <button
+                      disabled={loading}
+                      className="primary-button"
+                    >
+                      {loading ? (
+                        <Spinner />
+                      ) : (
+                        "Continue"
+                      )}
+                    </button>
+                  </form>
 
-            {/* FORGOT PASSWORD VIEW */}
-            {view === "forgot" && (
-              <motion.div key="forgot" {...pageTransition}>
-                <button onClick={() => setView("login")} className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white mb-6 transition-colors">
-                  <ArrowLeft className="w-3 h-3" /> BACK
-                </button>
-                <div className="mb-6">
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white">Recover Password</h2>
-                  <p className="text-xs text-slate-500 mt-1">Enter your email to receive a reset link</p>
-                </div>
-                <form className="space-y-4" onSubmit={handleForgot}>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type="email" required placeholder="Account Email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-2xl border-none bg-slate-100/50 dark:bg-slate-800/50 pl-11 pr-4 py-4 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+                  <div className="mt-5 flex items-center justify-between text-sm">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setView("forgot");
+                        setError("");
+                      }}
+                      className="text-blue-600 hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setView("signup");
+                        setError("");
+                      }}
+                      className="font-semibold text-blue-600 hover:underline"
+                    >
+                      Create account
+                    </button>
                   </div>
-                  {error && <p className="text-xs font-semibold text-rose-500 px-1">{error}</p>}
-                  <motion.button whileTap={{ scale: 0.98 }} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-2xl shadow-xl shadow-blue-500/20 transition-all">
-                    {loading ? <RefreshCw className="w-5 h-5 animate-spin mx-auto" /> : "Send Reset Link"}
-                  </motion.button>
-                </form>
-              </motion.div>
-            )}
+                </>
+              )}
 
-            {/* SUCCESS VIEW */}
-            {view === "success" && (
-              <motion.div key="success" {...pageTransition} className="text-center">
-                <div className="flex flex-col items-center py-6">
-                  <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-500 mb-6">
-                    <CheckCircle2 className="w-12 h-12" />
-                  </div>
-                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Check Your Email</h2>
-                  <p className="text-sm text-slate-500 mt-3 px-4">We've sent the instructions to recover your account if it exists in our system.</p>
-                  <motion.button 
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => setView("login")} 
-                    className="mt-10 px-8 py-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-blue-600 hover:text-white transition-all"
+              {/* SIGNUP */}
+              {view === "signup" && (
+                <>
+                  <Back
+                    onClick={() => {
+                      setView("login");
+                      setError("");
+                    }}
+                  />
+
+                  <Title
+                    title="Create account"
+                    subtitle="Students and parents can self-register. Staff accounts are provisioned by an administrator."
+                  />
+
+                  <form
+                    onSubmit={submitSignup}
+                    className="space-y-4"
                   >
-                    Back to Login
-                  </motion.button>
+                    <label className="input-shell">
+                      <User className="h-4 w-4 text-slate-400" />
+
+                      <input
+                        required
+                        minLength={2}
+                        autoComplete="name"
+                        value={name}
+                        onChange={(event) =>
+                          setName(event.target.value)
+                        }
+                        placeholder="Full name"
+                        className="input-control"
+                      />
+                    </label>
+
+                    <EmailField
+                      value={email}
+                      setValue={setEmail}
+                    />
+
+                    <PasswordField
+                      value={password}
+                      setValue={setPassword}
+                      autoComplete="new-password"
+                    />
+
+                    <label className="block text-sm font-semibold">
+                      Account type
+
+                      <select
+                        value={role}
+                        onChange={(event) =>
+                          setRole(
+                            event.target.value as PublicRole
+                          )
+                        }
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800"
+                      >
+                        <option value="STUDENT">
+                          Student
+                        </option>
+
+                        <option value="PARENT">
+                          Parent
+                        </option>
+                      </select>
+                    </label>
+
+                    {error && (
+                      <ErrorMessage message={error} />
+                    )}
+
+                    <button
+                      disabled={loading}
+                      className="primary-button"
+                    >
+                      {loading ? (
+                        <Spinner />
+                      ) : (
+                        "Register and verify email"
+                      )}
+                    </button>
+                  </form>
+                </>
+              )}
+
+              {/* OTP */}
+              {view === "otp" && (
+                <>
+                  <Back
+                    onClick={() =>
+                      setView(
+                        otpPurpose === "REGISTER"
+                          ? "signup"
+                          : "login"
+                      )
+                    }
+                  />
+
+                  <Title
+                    title="Verify your email"
+                    subtitle={`Enter the six-digit code sent to ${email}.`}
+                  />
+
+                  <form onSubmit={submitOtp}>
+                    <div className="flex gap-2">
+                      {otp.map((digit, index) => (
+                        <input
+                          key={index}
+                          ref={(element) => {
+                            otpRefs.current[index] =
+                              element;
+                          }}
+                          aria-label={`Verification digit ${
+                            index + 1
+                          }`}
+                          inputMode="numeric"
+                          maxLength={1}
+                          value={digit}
+                          onChange={(event) =>
+                            changeOtp(
+                              index,
+                              event.target.value
+                            )
+                          }
+                          onKeyDown={(event) =>
+                            otpKeyDown(index, event)
+                          }
+                          className="h-13 min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 py-3 text-center text-xl font-black outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800"
+                        />
+                      ))}
+                    </div>
+
+                    {error && (
+                      <div className="mt-4">
+                        <ErrorMessage
+                          message={error}
+                        />
+                      </div>
+                    )}
+
+                    <button
+                      disabled={
+                        loading ||
+                        otp.some((digit) => !digit)
+                      }
+                      className="primary-button mt-6"
+                    >
+                      {loading ? (
+                        <Spinner />
+                      ) : (
+                        "Verify and continue"
+                      )}
+                    </button>
+                  </form>
+
+                  <button
+                    type="button"
+                    disabled={resendSeconds > 0}
+                    onClick={() => void resend()}
+                    className="mt-4 flex w-full items-center justify-center gap-2 text-sm font-semibold text-blue-600 disabled:text-slate-400"
+                  >
+                    {resendSeconds ? (
+                      <>
+                        <Clock className="h-4 w-4" />
+                        Resend in {resendSeconds}s
+                      </>
+                    ) : (
+                      "Resend code"
+                    )}
+                  </button>
+                </>
+              )}
+
+              {/* FORGOT PASSWORD */}
+              {view === "forgot" && (
+                <>
+                  <Back
+                    onClick={() => {
+                      setView("login");
+                      setError("");
+                    }}
+                  />
+
+                  <Title
+                    title="Reset your password"
+                    subtitle="If an account exists, the server will email reset instructions."
+                  />
+
+                  <form
+                    onSubmit={submitForgot}
+                    className="space-y-4"
+                  >
+                    <EmailField
+                      value={email}
+                      setValue={setEmail}
+                    />
+
+                    {error && (
+                      <ErrorMessage message={error} />
+                    )}
+
+                    <button
+                      disabled={loading}
+                      className="primary-button"
+                    >
+                      {loading ? (
+                        <Spinner />
+                      ) : (
+                        "Send reset instructions"
+                      )}
+                    </button>
+                  </form>
+                </>
+              )}
+
+              {/* SUCCESS */}
+              {view === "success" && (
+                <div className="py-10 text-center">
+                  <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-500" />
+
+                  <Title
+                    title="Check your email"
+                    subtitle="If the account exists, password-reset instructions have been sent."
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView("login");
+                      setError("");
+                    }}
+                    className="primary-button mt-6"
+                  >
+                    Back to sign in
+                  </button>
                 </div>
-              </motion.div>
-            )}
+              )}
+
+            </motion.div>
           </AnimatePresence>
 
-          {/* Social Proof / Trust Badges */}
-          <div className="mt-12 pt-8 border-t border-slate-100 dark:border-slate-800/50 flex justify-center gap-8 text-slate-400 dark:text-slate-600 transition-colors">
-            <motion.div whileHover={{ scale: 1.2, color: "#10b981" }}><GraduationCap className="w-5 h-5" /></motion.div>
-            <motion.div whileHover={{ scale: 1.2, color: "#3b82f6" }}><Presentation className="w-5 h-5" /></motion.div>
-            <motion.div whileHover={{ scale: 1.2, color: "#8b5cf6" }}><Users className="w-5 h-5" /></motion.div>
-            <motion.div whileHover={{ scale: 1.2, color: "#f43f5e" }}><Shield className="w-5 h-5" /></motion.div>
-          </div>
+          <p className="mt-8 text-center text-xs text-slate-400">
+            By continuing, you agree to your school&apos;s
+            acceptable-use and privacy policies.
+          </p>
 
-        </div>
-      </motion.div>
-
-      {/* Aesthetic Floating Footer Info */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest pointer-events-none">
-        <span>Cloud Sync Active</span>
-        <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span>Secure Session v2.0</span>
+          <p className="mt-3 text-center text-xs">
+            <Link
+              href="/"
+              className="text-blue-600 hover:underline"
+            >
+              Return to CampusCore home
+            </Link>
+          </p>
+        </section>
       </div>
+    </main>
+  );
+}
 
+/* =========================================================
+   TITLE
+========================================================= */
+
+function Title({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <div className="mb-6">
+      <h2 className="text-2xl font-black">
+        {title}
+      </h2>
+
+      <p className="mt-1 text-sm text-slate-500">
+        {subtitle}
+      </p>
     </div>
   );
+}
+
+/* =========================================================
+   EMAIL FIELD
+========================================================= */
+
+function EmailField({
+  value,
+  setValue,
+}: {
+  value: string;
+  setValue: (value: string) => void;
+}) {
+  return (
+    <label className="input-shell">
+      <Mail className="h-4 w-4 text-slate-400" />
+
+      <input
+        required
+        type="email"
+        autoComplete="email"
+        value={value}
+        onChange={(event) =>
+          setValue(event.target.value)
+        }
+        placeholder="Email address"
+        className="input-control"
+      />
+    </label>
+  );
+}
+
+/* =========================================================
+   PASSWORD FIELD
+   FIXED REGEX
+========================================================= */
+
+function isPasswordValid(value: string) {
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,128}$/.test(value);
+}
+
+function getPasswordValidationError(value: string) {
+  if (!value) return "Password is required.";
+  if (value.length < 8) return "Password must be at least 8 characters long.";
+  if (value.length > 128) return "Password must be 128 characters or fewer.";
+  if (!/[a-z]/.test(value)) return "Password must include at least one lowercase letter.";
+  if (!/[A-Z]/.test(value)) return "Password must include at least one uppercase letter.";
+  if (!/\d/.test(value)) return "Password must include at least one number.";
+  if (!/[^A-Za-z0-9]/.test(value)) return "Password must include at least one special character.";
+  return "";
+}
+
+function PasswordField({
+  value,
+  setValue,
+  autoComplete,
+}: {
+  value: string;
+  setValue: (value: string) => void;
+  autoComplete: string;
+}) {
+  const isNewPassword =
+    autoComplete === "new-password";
+
+  return (
+    <div>
+      <label className="input-shell">
+        <Lock className="h-4 w-4 text-slate-400" />
+
+        <input
+          required
+          minLength={isNewPassword ? 8 : 1}
+          maxLength={128}
+          type="password"
+          autoComplete={autoComplete}
+          value={value}
+          onChange={(event) =>
+            setValue(event.target.value)
+          }
+          placeholder="Password"
+          className="input-control"
+        />
+      </label>
+
+      {isNewPassword && (
+        <p className="mt-1 px-1 text-xs text-slate-500">
+          Use 8–128 characters with uppercase,
+          lowercase, a number, and a special character.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   BACK BUTTON
+========================================================= */
+
+function Back({
+  onClick,
+}: {
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mb-5 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500"
+    >
+      <ArrowLeft className="h-4 w-4" />
+      Back
+    </button>
+  );
+}
+
+/* =========================================================
+   ERROR MESSAGE
+========================================================= */
+
+function ErrorMessage({
+  message,
+}: {
+  message: string;
+}) {
+  return (
+    <p
+      role="alert"
+      className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-200"
+    >
+      {message}
+    </p>
+  );
+}
+
+/* =========================================================
+   SPINNER
+========================================================= */
+
+function Spinner() {
+  return (
+    <RefreshCw className="mx-auto h-5 w-5 animate-spin" />
+  );
+}
+
+/* =========================================================
+   ERROR MESSAGE HELPER
+========================================================= */
+
+function messageOf(
+  error: unknown,
+  fallback = "The request failed."
+) {
+  return error instanceof Error
+    ? error.message
+    : fallback;
 }

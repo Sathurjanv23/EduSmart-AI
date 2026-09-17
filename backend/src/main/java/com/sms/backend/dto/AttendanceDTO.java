@@ -3,14 +3,27 @@ package com.sms.backend.dto;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
 public class AttendanceDTO {
     private String id;
+    @NotBlank(message = "Student ID is required")
+    @Size(max = 100)
     private String studentId;
+    @NotBlank(message = "Class ID is required")
+    @Size(max = 40)
     private String classId;
+    @NotNull(message = "Attendance date is required")
     private LocalDate attendanceDate;
+    @NotBlank(message = "Attendance status is required")
+    @Pattern(regexp = "PRESENT|ABSENT|LATE|EXCUSED", message = "Unsupported attendance status")
     private String status;
     private LocalDateTime checkInTime;
     private LocalDateTime checkOutTime;
+    @Size(max = 500)
     private String remark;
 
     public AttendanceDTO() {

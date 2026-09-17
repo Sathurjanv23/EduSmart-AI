@@ -16,4 +16,6 @@ public interface AuthService {
     LoginResponse verifyOtp(VerifyOtpRequest request);
 
     String resendOtp(ResendOtpRequest request);
+
+    AuthenticatedUserResponse getCurrentUser(String email);
 }

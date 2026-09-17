@@ -1,284 +1,133 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Users, 
-  Search, 
-  Plus, 
-  Filter, 
-  MoreVertical, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  GraduationCap,
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  UserPlus,
-  X
-} from 'lucide-react';
-import { getAllStudents, addStudent } from "@/app/services/studentService";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { GraduationCap, Search, Trash2, UserPlus, Users, X } from "lucide-react";
+import { addStudent, deleteStudent, getAllStudents } from "@/app/services/studentService";
+import { Student, StudentGender } from "@/app/types/api";
+import { EmptyState, ErrorState, InlineNotice, LoadingState } from "@/components/AsyncState";
 
-export default function StudentManagement() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [students, setStudents] = useState<any[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newStudent, setNewStudent] = useState({ name: "", email: "", grade: "10-A", parent: "", gender: "M" });
+type StudentForm = { name: string; email: string; parentEmail: string; studentClass: string; gender: "" | StudentGender };
+const EMPTY_FORM: StudentForm = { name: "", email: "", parentEmail: "", studentClass: "", gender: "" };
 
-  useEffect(() => {
-    fetchStudents();
+export default function StudentManagementPage() {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState<StudentForm>(EMPTY_FORM);
+
+  const loadStudents = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setStudents(await getAllStudents());
+    } catch (unknownError: unknown) {
+      setError(unknownError instanceof Error ? unknownError.message : "Could not load students.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const fetchStudents = async () => {
+  useEffect(() => { void loadStudents(); }, [loadStudents]);
+
+  const filteredStudents = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return students;
+    return students.filter((student) => [student.name, student.email, student.parentEmail, student.studentClass, student.id].some((value) => value?.toLowerCase().includes(term)));
+  }, [query, students]);
+
+  const submitStudent = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setNotice("");
     try {
-      const data = await getAllStudents();
-      if (data) setStudents(data);
-    } catch (error) {
-      console.log("Using static data as fallback");
-      setStudents([
-        { id: 'STD101', name: 'Arun Kumar', grade: '10-A', parent: 'Kumar S.', email: 'arun@example.com', status: 'Active', gender: 'M' },
-        { id: 'STD102', name: 'Balan S.', grade: '10-B', parent: 'Suresh V.', email: 'balan@example.com', status: 'Active', gender: 'M' },
-      ]);
+      const created = await addStudent({
+        name: form.name.trim(),
+        email: form.email.trim().toLowerCase(),
+        parentEmail: form.parentEmail.trim() ? form.parentEmail.trim().toLowerCase() : null,
+        studentClass: form.studentClass.trim(),
+        gender: form.gender || null,
+      });
+      setStudents((current) => [created, ...current]);
+      setForm(EMPTY_FORM);
+      setModalOpen(false);
+      setNotice(`${created.name} was added successfully.`);
+    } catch (unknownError: unknown) {
+      setError(unknownError instanceof Error ? unknownError.message : "Could not add the student.");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const removeStudent = async (student: Student) => {
+    if (!window.confirm(`Delete ${student.name}'s student profile? Their login account will remain active.`)) return;
+    setError("");
     try {
-      await addStudent({ ...newStudent, status: "Active" });
-      setIsModalOpen(false);
-      fetchStudents();
-      alert("Student added successfully to MongoDB!");
-    } catch (error) {
-      alert("Error adding student. Check console.");
+      await deleteStudent(student.id);
+      setStudents((current) => current.filter((item) => item.id !== student.id));
+      setNotice(`${student.name}'s student profile was deleted. The login account was not removed.`);
+    } catch (unknownError: unknown) {
+      setError(unknownError instanceof Error ? unknownError.message : "Could not delete the student.");
     }
   };
 
   return (
-    <div className="p-6 lg:p-10 max-w-[1600px] mx-auto">
-      
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
-            <Users className="w-8 h-8 text-rose-600" />
-            Student Directory
-          </h1>
-          <p className="text-slate-500 font-medium mt-1">Manage admissions, profiles, and academic records for all students.</p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <button className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-6 py-3 rounded-2xl font-bold border border-slate-200 dark:border-slate-700 hover:bg-white transition-all flex items-center gap-2">
-            <Download className="w-5 h-5" /> Export Data
-          </button>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="bg-rose-600 hover:bg-rose-700 text-white px-8 py-3 rounded-2xl font-black shadow-xl shadow-rose-500/20 flex items-center gap-2 transition-all active:scale-95"
-          >
-            <UserPlus className="w-5 h-5" /> New Admission
-          </button>
-        </div>
+    <div className="mx-auto max-w-7xl space-y-8">
+      <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div><h1 className="flex items-center gap-3 text-3xl font-black"><Users className="h-8 w-8 text-rose-600" />Student directory</h1><p className="mt-1 text-slate-500">Manage real student profiles and parent links.</p></div>
+        <button type="button" onClick={() => setModalOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-3 text-sm font-bold text-white hover:bg-rose-500"><UserPlus className="h-5 w-5" />New student</button>
+      </header>
+
+      {notice && <InlineNotice message={notice} />}
+      <InlineNotice tone="info" message="A STUDENT login account must exist before its profile can be added here. Use User Accounts to provision new accounts." />
+      {error && !loading && <InlineNotice message={error} tone="error" />}
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Stat label="Students" value={students.length} />
+        <Stat label="Classes represented" value={new Set(students.map((student) => student.studentClass)).size} />
+        <Stat label="Parent links" value={students.filter((student) => Boolean(student.parentEmail)).length} />
       </div>
 
-      {/* Analytics Mini-Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        {[
-          { label: 'Total Enrolled', value: '1,248', icon: Users, color: 'text-rose-600', bg: 'bg-rose-100' },
-          { label: 'Male Students', value: '642', icon: GraduationCap, color: 'text-blue-600', bg: 'bg-blue-100' },
-          { label: 'Female Students', value: '606', icon: GraduationCap, color: 'text-purple-600', bg: 'bg-purple-100' },
-          { label: 'New Admissions', value: '24', icon: Plus, color: 'text-emerald-600', bg: 'bg-emerald-100' },
-        ].map((stat, idx) => (
-          <div key={idx} className="bg-white dark:bg-slate-900/50 p-6 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 flex items-center gap-5">
-            <div className={`w-14 h-14 rounded-2xl ${stat.bg} dark:bg-opacity-20 ${stat.color} flex items-center justify-center`}>
-              <stat.icon className="w-7 h-7" />
-            </div>
-            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</p>
-              <h3 className="text-2xl font-black text-slate-900 dark:text-white">{stat.value}</h3>
-            </div>
-          </div>
-        ))}
-      </div>
+      <label className="relative block">
+        <span className="sr-only">Search students</span><Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, ID, class, email, or parent email" className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-12 pr-4 outline-none focus:ring-2 focus:ring-rose-500 dark:border-slate-800 dark:bg-slate-900" />
+      </label>
 
-      {/* Controls Bar */}
-      <div className="bg-white dark:bg-slate-900/50 p-4 rounded-[2rem] border border-slate-200 dark:border-slate-800 mb-8 flex flex-wrap items-center gap-6 shadow-sm">
-        <div className="flex-1 relative min-w-[300px]">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-          <input 
-            type="text" 
-            placeholder="Search by name, ID, or parent name..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-rose-500"
-          />
-        </div>
-        <div className="flex items-center gap-3">
-          <select className="bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-4 py-3 text-xs font-bold text-slate-600 outline-none">
-            <option>All Grades</option>
-            <option>Grade 10</option>
-            <option>Grade 11</option>
-          </select>
-          <button className="flex items-center gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-500">
-            <Filter className="w-4 h-4" /> Filter
-          </button>
-        </div>
-      </div>
-
-      {/* Directory Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        <AnimatePresence>
-          {students.map((student, idx) => (
-            <motion.div 
-              key={student.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.05 }}
-              className="bg-white dark:bg-slate-900/50 rounded-[3rem] p-8 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:border-rose-300 dark:hover:border-rose-900/50 transition-all group relative overflow-hidden"
-            >
-              <div className="flex justify-between items-start mb-6">
-                <div className={`w-16 h-16 rounded-[2rem] flex items-center justify-center text-2xl font-black shadow-lg ${student.gender === 'M' ? 'bg-blue-600 text-white' : 'bg-purple-600 text-white'}`}>
-                  {student.name[0]}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${student.status === 'Active' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                    {student.status}
-                  </span>
-                  <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors">
-                    <MoreVertical className="w-5 h-5 text-slate-400" />
-                  </button>
-                </div>
-              </div>
-
-              <h3 className="text-xl font-black text-slate-900 dark:text-white group-hover:text-rose-600 transition-colors">{student.name}</h3>
-              <p className="text-sm font-bold text-slate-400 mb-6 flex items-center gap-2">
-                <GraduationCap className="w-4 h-4" /> Grade {student.grade} • ID: {student.id}
-              </p>
-
-              <div className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex items-center gap-4 text-xs font-medium text-slate-600 dark:text-slate-400">
-                  <Users className="w-4 h-4 text-slate-400" />
-                  <span>Parent: <b>{student.parent}</b></span>
-                </div>
-                <div className="flex items-center gap-4 text-xs font-medium text-slate-600 dark:text-slate-400">
-                  <Mail className="w-4 h-4 text-slate-400" />
-                  <span>{student.email}</span>
-                </div>
-              </div>
-
-              <div className="mt-8 grid grid-cols-2 gap-4">
-                <button className="py-3 bg-slate-50 dark:bg-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-rose-600 hover:text-white transition-all">
-                  View Profile
-                </button>
-                <button className="py-3 bg-slate-50 dark:bg-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-rose-600 hover:text-white transition-all">
-                  Contact
-                </button>
-              </div>
-
-              {/* Background Glow */}
-              <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/5 rounded-full blur-3xl -mr-16 -mt-16 group-hover:scale-150 transition-all duration-700"></div>
-            </motion.div>
+      {loading ? <LoadingState label="Loading student records…" /> : error && students.length === 0 ? <ErrorState message={error} onRetry={() => void loadStudents()} /> : filteredStudents.length === 0 ? <EmptyState title={query ? "No matching students" : "No students yet"} message={query ? "Try a different search term." : "Add the first student to begin the academic workflow."} /> : (
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {filteredStudents.map((student) => (
+            <article key={student.id} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-start justify-between"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-xl font-black text-rose-600 dark:bg-rose-950">{student.name.charAt(0).toUpperCase()}</div><button type="button" onClick={() => void removeStudent(student)} aria-label={`Delete ${student.name}'s student profile`} title="Delete profile only" className="rounded-xl p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"><Trash2 className="h-4 w-4" /></button></div>
+              <h2 className="mt-4 text-lg font-bold">{student.name}</h2>
+              <p className="mt-1 flex items-center gap-2 text-sm text-slate-500"><GraduationCap className="h-4 w-4" />Class {student.studentClass || "Not assigned"}</p>
+              <dl className="mt-5 space-y-2 border-t border-slate-100 pt-4 text-sm dark:border-slate-800"><div><dt className="text-xs text-slate-400">Student email</dt><dd className="break-all">{student.email}</dd></div><div><dt className="text-xs text-slate-400">Parent email</dt><dd className="break-all">{student.parentEmail || "Not linked"}</dd></div><div><dt className="text-xs text-slate-400">Record ID</dt><dd className="break-all font-mono text-xs">{student.id}</dd></div></dl>
+            </article>
           ))}
-        </AnimatePresence>
-      </div>
+        </div>
+      )}
 
-      {/* Pagination */}
-      <div className="mt-12 flex items-center justify-center gap-4">
-        <button className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-rose-600 transition-all"><ChevronLeft className="w-5 h-5" /></button>
-        <span className="text-sm font-bold text-slate-500">Page 1 of 42</span>
-        <button className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-rose-600 transition-all"><ChevronRight className="w-5 h-5" /></button>
-      </div>
-
-      {/* Add Student Modal */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[3rem] p-8 shadow-2xl relative overflow-hidden"
-            >
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="absolute top-6 right-6 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
-              >
-                <X className="w-6 h-6 text-slate-400" />
-              </button>
-              
-              <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-6">New Student Admission</h2>
-              
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Student Name</label>
-                  <input 
-                    required 
-                    type="text" 
-                    value={newStudent.name}
-                    onChange={(e) => setNewStudent({...newStudent, name: e.target.value})}
-                    placeholder="Enter full name" 
-                    className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-6 py-3 text-sm outline-none focus:ring-2 focus:ring-rose-500" 
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
-                  <input 
-                    required 
-                    type="email" 
-                    value={newStudent.email}
-                    onChange={(e) => setNewStudent({...newStudent, email: e.target.value})}
-                    placeholder="student@example.com" 
-                    className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-6 py-3 text-sm outline-none focus:ring-2 focus:ring-rose-500" 
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Grade</label>
-                    <input 
-                      required 
-                      type="text" 
-                      value={newStudent.grade}
-                      onChange={(e) => setNewStudent({...newStudent, grade: e.target.value})}
-                      placeholder="e.g. 10-A" 
-                      className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-6 py-3 text-sm outline-none focus:ring-2 focus:ring-rose-500" 
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Gender</label>
-                    <select 
-                      value={newStudent.gender}
-                      onChange={(e) => setNewStudent({...newStudent, gender: e.target.value})}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-6 py-3 text-sm outline-none"
-                    >
-                      <option value="M">Male</option>
-                      <option value="F">Female</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Parent/Guardian Name</label>
-                  <input 
-                    required 
-                    type="text" 
-                    value={newStudent.parent}
-                    onChange={(e) => setNewStudent({...newStudent, parent: e.target.value})}
-                    placeholder="Enter parent name" 
-                    className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-6 py-3 text-sm outline-none focus:ring-2 focus:ring-rose-500" 
-                  />
-                </div>
-                
-                <button 
-                  type="submit" 
-                  className="w-full mt-6 bg-rose-600 hover:bg-rose-500 text-white py-4 rounded-2xl font-black text-sm shadow-xl transition-all"
-                >
-                  Register Student
-                </button>
-              </form>
-            </motion.div>
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="student-dialog-title">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-7 shadow-2xl dark:bg-slate-900">
+            <div className="flex items-center justify-between"><h2 id="student-dialog-title" className="text-xl font-black">Add student</h2><button type="button" onClick={() => setModalOpen(false)} aria-label="Close"><X className="h-5 w-5" /></button></div>
+            <form onSubmit={submitStudent} className="mt-6 grid gap-4">
+              <Field label="Full name"><input required minLength={2} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="field" /></Field>
+              <Field label="Student email"><input required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className="field" /></Field>
+              <Field label="Parent email (optional)"><input type="email" value={form.parentEmail} onChange={(event) => setForm({ ...form, parentEmail: event.target.value })} className="field" /></Field>
+              <div className="grid gap-4 sm:grid-cols-2"><Field label="Class"><input required placeholder="10-A" value={form.studentClass} onChange={(event) => setForm({ ...form, studentClass: event.target.value })} className="field" /></Field><Field label="Gender (optional)"><select value={form.gender} onChange={(event) => setForm({ ...form, gender: event.target.value as StudentForm["gender"] })} className="field"><option value="">Prefer not to provide</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option><option value="PREFER_NOT_TO_SAY">Prefer not to say</option></select></Field></div>
+              {error && <InlineNotice message={error} tone="error" />}
+              <button disabled={saving} className="mt-2 rounded-xl bg-rose-600 py-3 font-bold text-white disabled:opacity-60">{saving ? "Saving…" : "Add student"}</button>
+            </form>
           </div>
-        )}
-      </AnimatePresence>
-
+        </div>
+      )}
     </div>
   );
 }
+
+function Stat({ label, value }: { label: string; value: number }) { return <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p><p className="mt-1 text-3xl font-black">{value}</p></div>; }
+function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="grid gap-1 text-sm font-semibold text-slate-600 dark:text-slate-300">{label}{children}</label>; }

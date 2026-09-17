@@ -4,6 +4,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.springframework.data.mongodb.core.index.Indexed;
 
 @Document(collection = "exams")
 public class Exam {
@@ -11,7 +12,9 @@ public class Exam {
     private String id;
     private String title;
     private String description;
+    @Indexed
     private String classId;
+    @Indexed
     private String subject;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
@@ -19,10 +22,12 @@ public class Exam {
     private Integer passingMarks;
     private String examType; // MCQ, ESSAY, MIXED
     private List<String> questionIds;
+    @Indexed
     private String createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime publishedAt;
+    @Indexed
     private String status; // DRAFT, PUBLISHED, ONGOING, COMPLETED
 
     public Exam() {

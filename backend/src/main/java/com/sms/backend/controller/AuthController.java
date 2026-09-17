@@ -1,122 +1,112 @@
 package com.sms.backend.controller;
 
+import java.security.Principal;
+import java.util.Locale;
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
-import jakarta.validation.Valid;
-
-import com.sms.backend.dto.*;
+import com.sms.backend.dto.AuthenticatedUserResponse;
+import com.sms.backend.dto.ForgotPasswordRequest;
+import com.sms.backend.dto.LoginRequest;
+import com.sms.backend.dto.LoginResponse;
+import com.sms.backend.dto.ResendOtpRequest;
+import com.sms.backend.dto.ResetPasswordRequest;
+import com.sms.backend.dto.SignupRequest;
+import com.sms.backend.dto.SignupResponse;
+import com.sms.backend.dto.VerifyOtpRequest;
+import com.sms.backend.security.RateLimitService;
 import com.sms.backend.service.AuthService;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001"})
 public class AuthController {
-
     private final AuthService authService;
+    private final RateLimitService rateLimitService;
+    private final int loginLimit;
+    private final int otpLimit;
+    private final int passwordResetLimit;
 
-    public AuthController(AuthService authService) {
+    public AuthController(
+            AuthService authService,
+            RateLimitService rateLimitService,
+            @Value("${app.auth.login-rate-limit:10}") int loginLimit,
+            @Value("${app.auth.otp-rate-limit:10}") int otpLimit,
+            @Value("${app.auth.password-reset-rate-limit:5}") int passwordResetLimit) {
+        if (loginLimit <= 0 || otpLimit <= 0 || passwordResetLimit <= 0) {
+            throw new IllegalStateException("Authentication rate limits must be positive");
+        }
         this.authService = authService;
+        this.rateLimitService = rateLimitService;
+        this.loginLimit = loginLimit;
+        this.otpLimit = otpLimit;
+        this.passwordResetLimit = passwordResetLimit;
     }
 
-    // ── LOGIN — sends 2FA OTP after password check ────────────────
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
-        try {
-            LoginResponse response = authService.login(request);
-            return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
-            if ("EMAIL_NOT_VERIFIED".equals(e.getMessage())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(new MessageResponse("EMAIL_NOT_VERIFIED", request.getEmail()));
-            }
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new ErrorResponse(e.getMessage()));
-        }
+    public LoginResponse login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest servletRequest) {
+        rateLimitService.check("login", clientKey(servletRequest, request.getEmail()), loginLimit);
+        return authService.login(request);
     }
 
-    // ── SIGNUP — creates PENDING user, sends registration OTP ─────
     @PostMapping({"/signup", "/register"})
-    public ResponseEntity<?> signup(@Valid @RequestBody SignupRequest request) {
-        try {
-            SignupResponse response = authService.signup(request);
-            return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest()
-                    .body(new ErrorResponse(e.getMessage()));
-        }
+    public ResponseEntity<SignupResponse> signup(
+            @Valid @RequestBody SignupRequest request,
+            HttpServletRequest servletRequest) {
+        rateLimitService.check("signup", clientKey(servletRequest, request.getEmail()), otpLimit);
+        return ResponseEntity.status(HttpStatus.CREATED).body(authService.signup(request));
     }
 
-    // ── VERIFY OTP (REGISTER or LOGIN_2FA) ────────────────────────
     @PostMapping("/verify-otp")
-    public ResponseEntity<?> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
-        try {
-            LoginResponse response = authService.verifyOtp(request);
-            return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
-            if ("OTP_EXPIRED".equals(e.getMessage())) {
-                return ResponseEntity.status(HttpStatus.GONE)
-                        .body(new ErrorResponse("OTP has expired. Please request a new one."));
-            }
-            return ResponseEntity.badRequest()
-                    .body(new ErrorResponse(e.getMessage()));
-        }
+    public LoginResponse verifyOtp(
+            @Valid @RequestBody VerifyOtpRequest request,
+            HttpServletRequest servletRequest) {
+        rateLimitService.check("verify-otp", clientKey(servletRequest, request.getEmail()), otpLimit);
+        return authService.verifyOtp(request);
     }
 
-    // ── RESEND OTP ────────────────────────────────────────────────
     @PostMapping("/resend-otp")
-    public ResponseEntity<?> resendOtp(@Valid @RequestBody ResendOtpRequest request) {
-        try {
-            String message = authService.resendOtp(request);
-            return ResponseEntity.ok(new ErrorResponse(message));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest()
-                    .body(new ErrorResponse(e.getMessage()));
-        }
+    public Map<String, String> resendOtp(
+            @Valid @RequestBody ResendOtpRequest request,
+            HttpServletRequest servletRequest) {
+        rateLimitService.check("resend-otp", clientKey(servletRequest, request.getEmail()), otpLimit);
+        return Map.of("message", authService.resendOtp(request));
     }
 
-    // ── FORGOT PASSWORD ───────────────────────────────────────────
     @PostMapping("/forgot-password")
-    public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
-        try {
-            String message = authService.forgotPassword(request);
-            return ResponseEntity.ok(new ErrorResponse(message));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest()
-                    .body(new ErrorResponse(e.getMessage()));
-        }
+    public Map<String, String> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request,
+            HttpServletRequest servletRequest) {
+        rateLimitService.check("forgot-password", clientKey(servletRequest, request.getEmail()), passwordResetLimit);
+        return Map.of("message", authService.forgotPassword(request));
     }
 
-    // ── RESET PASSWORD ────────────────────────────────────────────
     @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
-        try {
-            String message = authService.resetPassword(request);
-            return ResponseEntity.ok(new ErrorResponse(message));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest()
-                    .body(new ErrorResponse(e.getMessage()));
-        }
+    public Map<String, String> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request,
+            HttpServletRequest servletRequest) {
+        rateLimitService.check("reset-password", servletRequest.getRemoteAddr(), passwordResetLimit);
+        return Map.of("message", authService.resetPassword(request));
     }
 
-    // ── Inner response classes ─────────────────────────────────────
-    public static class ErrorResponse {
-        private String message;
-        public ErrorResponse() {}
-        public ErrorResponse(String message) { this.message = message; }
-        public String getMessage() { return message; }
-        public void setMessage(String message) { this.message = message; }
+    @GetMapping("/me")
+    public AuthenticatedUserResponse me(Principal principal) {
+        return authService.getCurrentUser(principal.getName());
     }
 
-    public static class MessageResponse {
-        private String message;
-        private String email;
-        public MessageResponse(String message, String email) {
-            this.message = message;
-            this.email = email;
-        }
-        public String getMessage() { return message; }
-        public String getEmail() { return email; }
+    private String clientKey(HttpServletRequest request, String email) {
+        return request.getRemoteAddr() + '|' + email.trim().toLowerCase(Locale.ROOT);
     }
 }

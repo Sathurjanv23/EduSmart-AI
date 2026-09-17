@@ -1,34 +1,49 @@
 package com.sms.backend.controller;
 
+import java.net.URI;
+import java.util.List;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.sms.backend.dto.AnnouncementDTO;
 import com.sms.backend.model.Announcement;
 import com.sms.backend.service.AnnouncementService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/announcements")
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001"})
 public class AnnouncementController {
+    private final AnnouncementService announcementService;
 
-    @Autowired
-    private AnnouncementService announcementService;
+    public AnnouncementController(AnnouncementService announcementService) {
+        this.announcementService = announcementService;
+    }
 
     @PostMapping
-    public Announcement addAnnouncement(@RequestBody Announcement announcement) {
-        return announcementService.addAnnouncement(announcement);
+    public ResponseEntity<Announcement> addAnnouncement(
+            @Valid @RequestBody AnnouncementDTO request,
+            Authentication authentication) {
+        Announcement saved = announcementService.addAnnouncement(request, authentication.getName());
+        return ResponseEntity.created(URI.create("/api/announcements/" + saved.getId())).body(saved);
     }
 
     @GetMapping
-    public List<Announcement> getAllAnnouncements() {
-        return announcementService.getAllAnnouncements();
+    public List<Announcement> announcements(Authentication authentication) {
+        return announcementService.getVisibleAnnouncements(authentication);
     }
 
-    // ✅ ADD THIS DELETE API
     @DeleteMapping("/{id}")
-    public String deleteAnnouncement(@PathVariable String id) {
-        announcementService.deleteAnnouncement(id);
-        return "Deleted successfully";
+    public ResponseEntity<Void> delete(@PathVariable String id, Authentication authentication) {
+        announcementService.deleteAnnouncement(id, authentication);
+        return ResponseEntity.noContent().build();
     }
 }

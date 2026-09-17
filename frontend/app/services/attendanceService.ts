@@ -1,25 +1,16 @@
 import { apiRequest } from "./apiService";
+import { AttendanceRecord, AttendanceStatus } from "@/app/types/api";
 
-export async function markAttendance(attendanceData: {
-  studentName: string;
-  parentEmail: string;
-  date: string;
-  status: string;
-}) {
-  return apiRequest("/attendance", {
-    method: "POST",
-    body: JSON.stringify(attendanceData),
-  });
+export interface AttendanceInput {
+  studentId: string;
+  classId: string;
+  status: AttendanceStatus;
+  attendanceDate: string;
+  remark?: string;
 }
 
-export async function getAllAttendance() {
-  return apiRequest("/attendance", {
-    method: "GET",
-  });
-}
-
-export async function getAttendanceByStudent(studentId: string) {
-  return apiRequest(`/attendance/student/${studentId}`, {
-    method: "GET",
-  });
-}
+export const markAttendance = (record: AttendanceInput) => apiRequest<AttendanceRecord>("/attendance/mark", { method: "POST", body: record });
+export const getAllAttendance = () => apiRequest<AttendanceRecord[]>("/attendance");
+export const getAttendanceByStudent = (studentId: string) => apiRequest<AttendanceRecord[]>(`/attendance/student/${encodeURIComponent(studentId)}`);
+export const getMyAttendance = () => apiRequest<AttendanceRecord[]>("/attendance/me");
+export const getClassAttendance = (classId: string, date: string) => apiRequest<AttendanceRecord[]>(`/attendance/class/${encodeURIComponent(classId)}/date/${encodeURIComponent(date)}`);

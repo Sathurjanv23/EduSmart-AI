@@ -3,16 +3,32 @@ package com.sms.backend.dto;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import jakarta.validation.constraints.Future;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
 public class ExamDTO {
     private String id;
+    @NotBlank @Size(max = 160)
     private String title;
+    @Size(max = 5000)
     private String description;
+    @NotBlank @Size(max = 40)
     private String classId;
+    @NotBlank @Size(max = 80)
     private String subject;
+    @NotNull @Future
     private LocalDateTime startTime;
+    @NotNull @Future
     private LocalDateTime endTime;
+    @NotNull @Min(1)
     private Integer totalMarks;
+    @NotNull @Min(0)
     private Integer passingMarks;
+    @NotBlank @Pattern(regexp = "MCQ|ESSAY|MIXED")
     private String examType;
     private List<String> questionIds;
     private String status;

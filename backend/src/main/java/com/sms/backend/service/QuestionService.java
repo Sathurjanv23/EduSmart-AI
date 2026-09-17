@@ -3,18 +3,20 @@ package com.sms.backend.service;
 import com.sms.backend.model.Question;
 import com.sms.backend.dto.QuestionDTO;
 import com.sms.backend.repository.QuestionRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.sms.backend.exception.ApiException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 public class QuestionService {
 
-    @Autowired
-    private QuestionRepository questionRepository;
+    private final QuestionRepository questionRepository;
+
+    public QuestionService(QuestionRepository questionRepository) {
+        this.questionRepository = questionRepository;
+    }
 
     public Question createQuestion(QuestionDTO dto) {
         Question question = new Question();
@@ -35,33 +37,30 @@ public class QuestionService {
     }
 
     public Question getQuestionById(String id) {
-        return questionRepository.findById(id).orElse(null);
+        return requireById(id);
     }
 
     public Question updateQuestion(String id, QuestionDTO dto) {
-        Optional<Question> optional = questionRepository.findById(id);
-        if (optional.isPresent()) {
-            Question question = optional.get();
-            question.setQuestionText(dto.getQuestionText());
-            question.setOptions(dto.getOptions());
-            question.setCorrectAnswer(dto.getCorrectAnswer());
-            question.setMarks(dto.getMarks());
-            question.setDifficulty(dto.getDifficulty());
-            question.setUpdatedAt(LocalDateTime.now());
-            return questionRepository.save(question);
-        }
-        return null;
+        Question question = requireById(id);
+        question.setQuestionText(dto.getQuestionText());
+        question.setOptions(dto.getOptions());
+        question.setCorrectAnswer(dto.getCorrectAnswer());
+        question.setMarks(dto.getMarks());
+        question.setDifficulty(dto.getDifficulty());
+        question.setUpdatedAt(LocalDateTime.now());
+        return questionRepository.save(question);
     }
 
     public void deleteQuestion(String id) {
-        questionRepository.deleteById(id);
+        questionRepository.delete(requireById(id));
     }
 
     public Boolean checkAnswer(String questionId, String studentAnswer) {
-        Question question = questionRepository.findById(questionId).orElse(null);
-        if (question != null) {
-            return question.getCorrectAnswer().equals(studentAnswer);
-        }
-        return false;
+        Question question = requireById(questionId);
+        return question.getCorrectAnswer() != null && question.getCorrectAnswer().equals(studentAnswer);
+    }
+
+    private Question requireById(String id) {
+        return questionRepository.findById(id).orElseThrow(() -> ApiException.notFound("Question"));
     }
 }

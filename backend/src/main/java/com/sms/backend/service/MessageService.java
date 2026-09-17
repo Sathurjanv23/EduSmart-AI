@@ -2,24 +2,26 @@ package com.sms.backend.service;
 
 import com.sms.backend.model.Message;
 import com.sms.backend.repository.MessageRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.sms.backend.exception.ApiException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Optional;
 
 @Service
 public class MessageService {
 
-    @Autowired
-    private MessageRepository messageRepository;
+    private final MessageRepository messageRepository;
+
+    public MessageService(MessageRepository messageRepository) {
+        this.messageRepository = messageRepository;
+    }
 
     public Message sendMessage(Message message) {
         return messageRepository.save(message);
     }
 
     public Message getMessageById(String id) {
-        return messageRepository.findById(id).orElse(null);
+        return requireById(id);
     }
 
     public List<Message> getConversation(String user1, String user2) {
@@ -39,20 +41,20 @@ public class MessageService {
     }
 
     public Message markAsRead(String messageId) {
-        Optional<Message> optional = messageRepository.findById(messageId);
-        if (optional.isPresent()) {
-            Message message = optional.get();
-            message.setIsRead(true);
-            return messageRepository.save(message);
-        }
-        return null;
+        Message message = requireById(messageId);
+        message.setIsRead(true);
+        return messageRepository.save(message);
     }
 
     public void deleteMessage(String id) {
-        messageRepository.deleteById(id);
+        messageRepository.delete(requireById(id));
     }
 
     public Long getUnreadCount(String recipientId) {
         return messageRepository.findByRecipientIdAndIsReadFalse(recipientId).stream().count();
+    }
+
+    private Message requireById(String id) {
+        return messageRepository.findById(id).orElseThrow(() -> ApiException.notFound("Message"));
     }
 }

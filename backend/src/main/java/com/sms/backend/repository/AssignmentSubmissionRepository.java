@@ -14,4 +14,8 @@ public interface AssignmentSubmissionRepository extends MongoRepository<Assignme
     List<AssignmentSubmission> findByStudentId(String studentId);
 
     Optional<AssignmentSubmission> findByAssignmentIdAndStudentId(String assignmentId, String studentId);
+
+    List<AssignmentSubmission> findBySubmissionFileUrl(String submissionFileUrl);
+
+    List<AssignmentSubmission> findBySubmissionFileUrlContaining(String submissionFileUrl);
 }

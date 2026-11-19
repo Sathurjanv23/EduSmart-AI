@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,21 +16,25 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.sms.backend.dto.FileUploadResponse;
 import com.sms.backend.exception.ApiException;
+import com.sms.backend.security.AcademicAccessService;
 import com.sms.backend.service.FileStorageService;
 
 @RestController
 @RequestMapping("/api/upload")
 public class FileUploadController {
     private final FileStorageService fileStorageService;
+    private final AcademicAccessService accessService;
     private final int maxFilesPerRequest;
 
     public FileUploadController(
             FileStorageService fileStorageService,
+            AcademicAccessService accessService,
             @Value("${file.upload.max-files-per-request:10}") int maxFilesPerRequest) {
         if (maxFilesPerRequest <= 0) {
             throw new IllegalStateException("Upload file-count limit must be positive");
         }
         this.fileStorageService = fileStorageService;
+        this.accessService = accessService;
         this.maxFilesPerRequest = maxFilesPerRequest;
     }
 
@@ -53,7 +58,8 @@ public class FileUploadController {
     }
 
     @DeleteMapping("/{fileName:.+}")
-    public Map<String, String> delete(@PathVariable String fileName) {
+    public Map<String, String> delete(@PathVariable String fileName, Authentication authentication) {
+        accessService.requireAdmin(authentication);
         fileStorageService.delete(fileName);
         return Map.of("message", "File deleted successfully");
     }

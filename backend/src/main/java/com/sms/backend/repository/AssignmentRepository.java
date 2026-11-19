@@ -19,4 +19,8 @@ public interface AssignmentRepository extends MongoRepository<Assignment, String
     List<Assignment> findByStatus(String status);
 
     List<Assignment> findByCreatedBy(String createdBy);
+
+    List<Assignment> findByFileUrlOrAttachmentUrl(String fileUrl, String attachmentUrl);
+
+    List<Assignment> findByFileUrlContainingOrAttachmentUrlContaining(String fileUrl, String attachmentUrl);
 }

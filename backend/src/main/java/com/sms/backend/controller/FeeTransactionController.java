@@ -84,6 +84,7 @@ public class FeeTransactionController {
     public ResponseEntity<FeeTransaction> recordPayment(
             @Valid @RequestBody FeeTransactionDTO request,
             Authentication authentication) {
+        accessService.requireAdmin(authentication);
         FeeTransaction transaction = feeTransactionService.recordPayment(request, authentication.getName());
         return ResponseEntity.created(URI.create("/api/fee-transactions/" + transaction.getId())).body(transaction);
     }

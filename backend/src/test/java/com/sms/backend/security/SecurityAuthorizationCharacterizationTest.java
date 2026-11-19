@@ -23,6 +23,18 @@ class SecurityAuthorizationCharacterizationTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private com.sms.backend.service.StudentService studentService;
+
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private com.sms.backend.repository.AssignmentSubmissionRepository assignmentSubmissionRepository;
+
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private com.sms.backend.repository.AssignmentRepository assignmentRepository;
+
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private com.sms.backend.repository.AnnouncementRepository announcementRepository;
+
     @Nested
     @DisplayName("Public and Anonymous Endpoints")
     class PublicEndpoints {
@@ -326,6 +338,129 @@ class SecurityAuthorizationCharacterizationTest {
         @WithMockUser(authorities = "TEACHER")
         void undefinedEndpointIsDeniedForTeacher() throws Exception {
             mockMvc.perform(get("/api/nonexistent-route"))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    @Nested
+    @DisplayName("Tightened Student and Academic List Endpoints")
+    class AcademicListEndpointsScope {
+        @Test
+        @WithMockUser(authorities = "ADMIN")
+        void adminCanAccessStudentList() throws Exception {
+            mockMvc.perform(get("/api/students"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @WithMockUser(authorities = "TEACHER")
+        void teacherCannotAccessStudentList() throws Exception {
+            mockMvc.perform(get("/api/students"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser(authorities = "STUDENT")
+        void studentCannotAccessStudentList() throws Exception {
+            mockMvc.perform(get("/api/students"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser(authorities = "PARENT")
+        void parentCannotAccessStudentList() throws Exception {
+            mockMvc.perform(get("/api/students"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser(authorities = "TEACHER")
+        void teacherCannotAccessStudentPage() throws Exception {
+            mockMvc.perform(get("/api/students/page"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser(authorities = "STUDENT")
+        void studentCannotAccessStudentPage() throws Exception {
+            mockMvc.perform(get("/api/students/page"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser(authorities = "PARENT")
+        void parentCannotAccessStudentPage() throws Exception {
+            mockMvc.perform(get("/api/students/page"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser(authorities = "TEACHER")
+        void teacherCannotAccessAllAttendance() throws Exception {
+            mockMvc.perform(get("/api/attendance"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser(authorities = "STUDENT")
+        void studentCannotAccessAllAttendance() throws Exception {
+            mockMvc.perform(get("/api/attendance"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser(authorities = "TEACHER")
+        void teacherCannotAccessAllMarks() throws Exception {
+            mockMvc.perform(get("/api/marks"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser(authorities = "STUDENT")
+        void studentCannotAccessAllMarks() throws Exception {
+            mockMvc.perform(get("/api/marks"))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    @Nested
+    @DisplayName("Private File Downloads Authorization")
+    class PrivateFileDownloadsScope {
+        @Test
+        void anonymousCannotDownloadUploads() throws Exception {
+            mockMvc.perform(get("/uploads/550e8400-e29b-41d4-a716-446655440000.pdf"))
+                    .andExpect(status().isUnauthorized());
+            mockMvc.perform(get("/api/uploads/550e8400-e29b-41d4-a716-446655440000.pdf"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @WithMockUser(authorities = "STUDENT")
+        void studentCannotDownloadUnreferencedFile() throws Exception {
+            mockMvc.perform(get("/uploads/550e8400-e29b-41d4-a716-446655440000.pdf"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser(authorities = "TEACHER")
+        void teacherCannotDownloadUnreferencedFile() throws Exception {
+            mockMvc.perform(get("/uploads/550e8400-e29b-41d4-a716-446655440000.pdf"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser(authorities = "PARENT")
+        void parentCannotDownloadUnreferencedFile() throws Exception {
+            mockMvc.perform(get("/uploads/550e8400-e29b-41d4-a716-446655440000.pdf"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @WithMockUser(authorities = "ADMIN")
+        void nonGetRequestsOnUploadsPathAreDenied() throws Exception {
+            mockMvc.perform(post("/uploads/550e8400-e29b-41d4-a716-446655440000.pdf"))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(delete("/uploads/550e8400-e29b-41d4-a716-446655440000.pdf"))
                     .andExpect(status().isForbidden());
         }
     }

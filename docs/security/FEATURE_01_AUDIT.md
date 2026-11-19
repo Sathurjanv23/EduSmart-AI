@@ -230,12 +230,17 @@ To prevent regressions during subsequent hardening tasks, two test suites were e
 
 ---
 
-## 6. Implementation Plan for Next Tasks
+## 6. Implementation Status & Next Tasks
 
+- **Task 01.1 — Security Audit & Regression Baseline (`feature/01-1-security-audit`):**
+  - COMPLETED and merged into `main` (PR #2, commit `e626b82`).
 - **Task 01.2 — Academic Access-Control Hardening (`feature/01-2-access-control`):**
-  - Narrow overbroad route patterns in `SecurityConfig.java` (`GET /api/students/**` -> granular sub-routes).
-  - Enforce role-appropriate route rules at the filter level in addition to controller checks.
-  - Audit and tighten question and exam route permissions.
+  - COMPLETED. See [FEATURE_01_2_ACCESS_CONTROL.md](./FEATURE_01_2_ACCESS_CONTROL.md) for complete details.
+  - Granular route matchers implemented for `/api/students/**`, `/api/attendance/**`, and `/api/marks/**`.
+  - Static file serving removed; replaced by authenticated and authorized `FileDownloadController`.
+  - Record-level ownership checks enforced via `AcademicAccessService.requireFileAccess`.
+  - Controller-level `requireAdmin` defense-in-depth added across admin mutation endpoints.
+  - Backend test coverage expanded to 101 tests (all passing).
 - **Task 01.3 — Secure Sessions (`feature/01-3-secure-sessions`):**
   - Migrate JWT from frontend `localStorage` to HttpOnly SameSite cookies.
   - Implement CSRF protection and update CORS/credentials configuration.

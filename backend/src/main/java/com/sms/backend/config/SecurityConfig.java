@@ -75,11 +75,19 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/students/**").hasAuthority("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/students/**").hasAuthority("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/students/**").hasAuthority("ADMIN")
-                .requestMatchers(HttpMethod.GET, "/api/students/**").hasAnyAuthority("ADMIN", "TEACHER", "STUDENT", "PARENT")
+                .requestMatchers(HttpMethod.GET, "/api/students", "/api/students/page").hasAuthority("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/students/me").hasAnyAuthority("ADMIN", "STUDENT")
+                .requestMatchers(HttpMethod.GET, "/api/students/parent").hasAnyAuthority("ADMIN", "PARENT")
+                .requestMatchers(HttpMethod.GET, "/api/students/class/**").hasAnyAuthority("ADMIN", "TEACHER")
+                .requestMatchers(HttpMethod.GET, "/api/students/*").hasAnyAuthority("ADMIN", "TEACHER", "STUDENT", "PARENT")
+                .requestMatchers("/api/students/**").hasAuthority("ADMIN")
 
                 .requestMatchers(HttpMethod.POST, "/api/attendance/**", "/api/marks/**").hasAnyAuthority("ADMIN", "TEACHER")
                 .requestMatchers(HttpMethod.PUT, "/api/attendance/**", "/api/marks/**").hasAnyAuthority("ADMIN", "TEACHER")
-                .requestMatchers(HttpMethod.GET, "/api/attendance/**", "/api/marks/**").hasAnyAuthority("ADMIN", "TEACHER", "STUDENT", "PARENT")
+                .requestMatchers(HttpMethod.GET, "/api/attendance", "/api/marks").hasAuthority("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/attendance/me", "/api/marks/me").hasAnyAuthority("ADMIN", "STUDENT")
+                .requestMatchers(HttpMethod.GET, "/api/attendance/student/*", "/api/marks/student/*").hasAnyAuthority("ADMIN", "TEACHER", "STUDENT", "PARENT")
+                .requestMatchers(HttpMethod.GET, "/api/attendance/**", "/api/marks/**").hasAnyAuthority("ADMIN", "TEACHER")
 
                 .requestMatchers(HttpMethod.POST, "/api/assignments/submissions").hasAuthority("STUDENT")
                 .requestMatchers(HttpMethod.PATCH, "/api/assignments/submissions/*/grade").hasAnyAuthority("ADMIN", "TEACHER")
@@ -95,7 +103,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/upload").hasAnyAuthority("ADMIN", "TEACHER", "STUDENT")
                 .requestMatchers(HttpMethod.POST, "/api/upload/multiple").hasAnyAuthority("ADMIN", "TEACHER")
                 .requestMatchers(HttpMethod.DELETE, "/api/upload/**").hasAuthority("ADMIN")
-                .requestMatchers("/uploads/**").authenticated()
+                .requestMatchers(HttpMethod.GET, "/uploads/**", "/api/uploads/**").authenticated()
+                .requestMatchers("/uploads/**", "/api/uploads/**").denyAll()
 
                 .requestMatchers(HttpMethod.GET, "/api/announcements/**", "/api/exams/**",
                     "/api/library/books/**").authenticated()

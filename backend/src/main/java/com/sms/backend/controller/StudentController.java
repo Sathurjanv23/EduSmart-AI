@@ -42,6 +42,7 @@ public class StudentController {
     public ResponseEntity<StudentResponse> addStudent(
             @Valid @RequestBody StudentRequest request,
             Authentication authentication) {
+        accessService.requireAdmin(authentication);
         StudentResponse created = studentService.addStudent(request, authentication.getName());
         return ResponseEntity.created(URI.create("/api/students/" + created.id())).body(created);
     }
@@ -86,12 +87,17 @@ public class StudentController {
     }
 
     @PutMapping("/{id}")
-    public StudentResponse updateStudent(@PathVariable String id, @Valid @RequestBody StudentRequest request) {
+    public StudentResponse updateStudent(
+            @PathVariable String id,
+            @Valid @RequestBody StudentRequest request,
+            Authentication authentication) {
+        accessService.requireAdmin(authentication);
         return studentService.updateStudent(id, request);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteStudent(@PathVariable String id) {
+    public ResponseEntity<Void> deleteStudent(@PathVariable String id, Authentication authentication) {
+        accessService.requireAdmin(authentication);
         studentService.deleteStudent(id);
         return ResponseEntity.noContent().build();
     }

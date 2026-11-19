@@ -2,6 +2,7 @@ package com.sms.backend.service;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -13,6 +14,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -67,10 +70,41 @@ public class FileStorageService {
         return new FileUploadResponse(storedName, url, url, file.getSize(), Instant.now());
     }
 
+    public static final String FILE_NAME_PATTERN =
+            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+                    + "\\.(?i:pdf|png|jpg|jpeg|doc|docx|txt)$";
+
+    public boolean isValidFileName(String fileName) {
+        return fileName != null && fileName.matches(FILE_NAME_PATTERN);
+    }
+
+    public Resource loadAsResource(String fileName) {
+        if (!isValidFileName(fileName)) {
+            throw ApiException.badRequest("INVALID_FILE_NAME", "File name is invalid");
+        }
+        Path path = resolve(fileName);
+        try {
+            Resource resource = new UrlResource(path.toUri());
+            if (!resource.exists() || !resource.isReadable()) {
+                throw ApiException.notFound("File");
+            }
+            return resource;
+        } catch (MalformedURLException exception) {
+            throw ApiException.badRequest("INVALID_FILE_PATH", "File path is invalid");
+        }
+    }
+
+    public String getContentType(String fileName) {
+        String ext = extension(fileName);
+        Set<String> types = CONTENT_TYPES.get(ext);
+        if (types != null && !types.isEmpty()) {
+            return types.iterator().next();
+        }
+        return "application/octet-stream";
+    }
+
     public void delete(String fileName) {
-        if (!fileName.matches(
-                "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
-                        + "\\.(?i:pdf|png|jpg|jpeg|doc|docx|txt)")) {
+        if (!isValidFileName(fileName)) {
             throw ApiException.badRequest("INVALID_FILE_NAME", "File name is invalid");
         }
         Path path = resolve(fileName);

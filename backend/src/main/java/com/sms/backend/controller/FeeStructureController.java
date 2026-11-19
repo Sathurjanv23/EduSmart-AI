@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.sms.backend.exception.ApiException;
 import com.sms.backend.model.FeeStructure;
 import com.sms.backend.repository.FeeStructureRepository;
+import com.sms.backend.security.AcademicAccessService;
 
 import jakarta.validation.Valid;
 
@@ -24,13 +26,20 @@ import jakarta.validation.Valid;
 @RequestMapping("/api/fee-structure")
 public class FeeStructureController {
     private final FeeStructureRepository feeStructureRepository;
+    private final AcademicAccessService accessService;
 
-    public FeeStructureController(FeeStructureRepository feeStructureRepository) {
+    public FeeStructureController(
+            FeeStructureRepository feeStructureRepository,
+            AcademicAccessService accessService) {
         this.feeStructureRepository = feeStructureRepository;
+        this.accessService = accessService;
     }
 
     @PostMapping
-    public ResponseEntity<FeeStructure> create(@Valid @RequestBody FeeStructure feeStructure) {
+    public ResponseEntity<FeeStructure> create(
+            @Valid @RequestBody FeeStructure feeStructure,
+            Authentication authentication) {
+        accessService.requireAdmin(authentication);
         prepare(feeStructure);
         FeeStructure saved = feeStructureRepository.save(feeStructure);
         return ResponseEntity.created(URI.create("/api/fee-structure/" + saved.getId())).body(saved);
@@ -56,7 +65,11 @@ public class FeeStructureController {
     }
 
     @PutMapping("/{id}")
-    public FeeStructure update(@PathVariable String id, @Valid @RequestBody FeeStructure request) {
+    public FeeStructure update(
+            @PathVariable String id,
+            @Valid @RequestBody FeeStructure request,
+            Authentication authentication) {
+        accessService.requireAdmin(authentication);
         FeeStructure existing = feeStructureRepository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Fee structure"));
         request.setId(id);
@@ -66,7 +79,8 @@ public class FeeStructureController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable String id) {
+    public ResponseEntity<Void> delete(@PathVariable String id, Authentication authentication) {
+        accessService.requireAdmin(authentication);
         FeeStructure existing = feeStructureRepository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Fee structure"));
         feeStructureRepository.delete(existing);

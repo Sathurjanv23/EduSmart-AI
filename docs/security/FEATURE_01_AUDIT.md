@@ -225,7 +225,7 @@ To prevent regressions during subsequent hardening tasks, two test suites were e
 | **Frontend Lint** | `npm run lint` | **PASS** | 0 warnings, 0 errors (clean with `--max-warnings=0`) |
 | **Frontend Typecheck** | `npx tsc --noEmit` | **PASS** | 0 TypeScript errors |
 | **Frontend Build** | `npm run build` | **PASS** | Production Next.js build succeeded (46 static pages) |
-| **ML Service Tests** | `python -m pytest` | **PASS** | 11 pytest tests passing |
+| **ML Service Tests** | `pytest` | **PASS** | 11 pytest tests passing (`pythonpath = ["."]` in `pyproject.toml`) |
 | **Docker Compose** | `docker compose --env-file .env.example config --quiet` | **PASS** | Compose configuration valid |
 
 ---

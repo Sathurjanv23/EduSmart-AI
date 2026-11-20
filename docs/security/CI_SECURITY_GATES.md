@@ -102,8 +102,12 @@ To adhere to the principle of least privilege and defend against malicious PR ta
 As of November 2026, the dependency baselines across the three tiers are:
 
 ### 4.1 ML Service (`ml-service`)
-- **Status:** **Clean (0 vulnerabilities)**.
-- All 8 runtime packages (`fastapi`, `joblib`, `numpy`, `pydantic`, `scikit-learn`, `scipy`, `threadpoolctl`, `uvicorn`) are on current, patched releases.
+- **Status:** **Monitored Baseline (Transitive Starlette Dependency)**.
+- `pip-audit` detects advisories in `starlette 0.46.2` (transitively pinned by `fastapi 0.115.12`).
+- **Triage & Threat Modeling:**
+  - The ML service is deployed **strictly within the internal Docker network** (`school-management-system_internal: true`) and does not expose port 8000 to the edge or host network.
+  - It receives requests exclusively from the trusted backend Spring Boot service via internal HTTP (`http://ml-service:8000`), completely shielding Starlette from untrusted public web traffic or direct browser interaction.
+  - `pip-audit` runs in CI with advisory warnings emitted (`::warning`), and upgrading to `fastapi >= 0.116` / `starlette >= 0.49` is scheduled for subsequent maintenance cycles to prevent breaking model serving schemas.
 
 ### 4.2 Backend (`backend`)
 - **Status:** **Clean (0 unaddressed critical CVEs)**.

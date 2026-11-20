@@ -1,11 +1,28 @@
+# ==============================================================================
 # EduSmart-AI Backend CVE Exceptions
 # Verified non-exploitable / unreachable in CampusCore architecture
-# See docs/security/CI_SECURITY_GATES.md Section 5 for full triage evidence.
+# Full justification documented in docs/security/CI_SECURITY_GATES.md Section 5
+# ==============================================================================
 
-# CVE-2026-47884: Spring Framework XsltView path limitation / RCE
-# CampusCore is a pure JSON REST API (@RestController) with no XSLT view resolvers.
+# Vulnerability ID: CVE-2026-47884
+# Package: org.springframework:spring-webmvc
+# Scope: backend (Spring MVC transitive dependency via spring-boot-starter-web)
+# Owner: Sathu (Lead Security Engineer)
+# Review Date: 2026-11-20
+# Next Review Date: 2027-02-20
+# Justification: Remote Code Execution via XsltView path traversal in Spring Web.
+# Reachability Analysis: UNREACHABLE. CampusCore is architected strictly as a headless JSON REST API (@RestController).
+# No XsltView, XsltViewResolver, or XSLT stylesheet templates exist in the codebase.
+# Remediation Conditions: Upgrade to Spring Framework 7.x or backported 6.2.x patch release when officially published.
 CVE-2026-47884
 
-# CVE-2026-47890: Spring Framework SSE stream corruption with view templates
-# CampusCore does not implement Server-Sent Events (SSE) with view templates.
+# Vulnerability ID: CVE-2026-47890
+# Package: org.springframework:spring-webmvc
+# Scope: backend (Spring MVC transitive dependency via spring-boot-starter-web)
+# Owner: Sathu (Lead Security Engineer)
+# Review Date: 2026-11-20
+# Next Review Date: 2027-02-20
+# Justification: Stream corruption in Server-Sent Events (SSE) combined with view-rendering contexts.
+# Reachability Analysis: UNREACHABLE. CampusCore does not implement Server-Sent Events (SseEmitter) with view templates.
+# Remediation Conditions: Upgrade to Spring Framework 7.x or backported 6.2.x patch release when officially published.
 CVE-2026-47890

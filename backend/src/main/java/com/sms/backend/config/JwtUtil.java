@@ -2,8 +2,13 @@ package com.sms.backend.config;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Date;
+import java.util.HexFormat;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,8 +45,13 @@ public class JwtUtil {
     }
 
     public String generateToken(String email, String role) {
+        return generateToken(email, role, UUID.randomUUID().toString());
+    }
+
+    public String generateToken(String email, String role, String tokenId) {
         long now = clock.millis();
         return Jwts.builder()
+                .setId(tokenId)
                 .setSubject(email)
                 .claim("role", role)
                 .setIssuedAt(new Date(now))
@@ -61,6 +71,36 @@ public class JwtUtil {
 
     public String extractEmail(String token) {
         return extractClaims(token).getSubject();
+    }
+
+    public String extractTokenId(String token) {
+        try {
+            Claims claims = extractClaims(token);
+            if (claims.getId() != null && !claims.getId().isBlank()) {
+                return claims.getId();
+            }
+            return hashToken(token);
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
+    public Instant extractExpiration(String token) {
+        try {
+            return extractClaims(token).getExpiration().toInstant();
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
+    private String hashToken(String token) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(token.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException exception) {
+            return token;
+        }
     }
 
     public boolean isTokenValid(String token) {

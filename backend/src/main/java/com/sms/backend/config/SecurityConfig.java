@@ -2,9 +2,9 @@ package com.sms.backend.config;
 
 import java.io.IOException;
 
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
@@ -14,9 +14,15 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sms.backend.exception.ApiErrorResponse;
+import com.sms.backend.security.CookieService;
+import com.sms.backend.security.CsrfCookieFilter;
+import com.sms.backend.security.RequestOriginValidationFilter;
 
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -25,10 +31,18 @@ import jakarta.servlet.http.HttpServletResponse;
 public class SecurityConfig {
     private final JwtFilter jwtFilter;
     private final ObjectMapper objectMapper;
+    private final CookieService cookieService;
+    private final RequestOriginValidationFilter requestOriginValidationFilter;
 
-    public SecurityConfig(JwtFilter jwtFilter, ObjectMapper objectMapper) {
+    public SecurityConfig(
+            JwtFilter jwtFilter,
+            ObjectMapper objectMapper,
+            CookieService cookieService,
+            RequestOriginValidationFilter requestOriginValidationFilter) {
         this.jwtFilter = jwtFilter;
         this.objectMapper = objectMapper;
+        this.cookieService = cookieService;
+        this.requestOriginValidationFilter = requestOriginValidationFilter;
     }
 
     @Bean
@@ -44,10 +58,37 @@ public class SecurityConfig {
     }
 
     @Bean
+    public FilterRegistrationBean<RequestOriginValidationFilter> disableContainerOriginFilterRegistration(
+            RequestOriginValidationFilter filter) {
+        FilterRegistrationBean<RequestOriginValidationFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        CookieCsrfTokenRepository tokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        tokenRepository.setHeaderName("X-XSRF-TOKEN");
+        tokenRepository.setCookiePath("/");
+        tokenRepository.setCookieCustomizer(cookie -> {
+            cookie.sameSite(cookieService.getSameSite());
+            cookie.secure(cookieService.isCookieSecure());
+        });
+
+        CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
+        requestHandler.setCsrfRequestAttributeName(null);
+
         http
             .cors(Customizer.withDefaults())
-            .csrf(csrf -> csrf.disable())
+            .csrf(csrf -> csrf
+                .csrfTokenRepository(tokenRepository)
+                .csrfTokenRequestHandler(requestHandler)
+                .ignoringRequestMatchers(
+                    "/api/auth/login", "/api/auth/signup", "/api/auth/register",
+                    "/api/auth/verify-otp", "/api/auth/resend-otp",
+                    "/api/auth/forgot-password", "/api/auth/reset-password",
+                    "/actuator/**"
+                ))
             .httpBasic(httpBasic -> httpBasic.disable())
             .formLogin(form -> form.disable())
             .logout(logout -> logout.disable())
@@ -62,9 +103,10 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/api/auth/login", "/api/auth/signup", "/api/auth/register",
                     "/api/auth/verify-otp", "/api/auth/resend-otp",
-                    "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
+                    "/api/auth/forgot-password", "/api/auth/reset-password",
+                    "/api/auth/csrf").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/info", "/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
-                .requestMatchers("/api/auth/me").authenticated()
+                .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
 
                 .requestMatchers("/api/admin/**").hasAuthority("ADMIN")
                 .requestMatchers("/api/teacher/**").hasAnyAuthority("TEACHER", "ADMIN")
@@ -119,6 +161,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/notifications/*/read", "/api/notifications/user/*/read-all").authenticated()
                 .requestMatchers("/api/messages/**", "/api/notifications/**").hasAuthority("ADMIN")
                 .anyRequest().denyAll())
+            .addFilterBefore(requestOriginValidationFilter, CsrfFilter.class)
+            .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class)
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

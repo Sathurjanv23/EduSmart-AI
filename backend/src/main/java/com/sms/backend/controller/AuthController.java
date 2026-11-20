@@ -25,8 +25,11 @@ import com.sms.backend.dto.VerifyOtpRequest;
 import com.sms.backend.security.RateLimitService;
 import com.sms.backend.service.AuthService;
 
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.security.web.csrf.CsrfToken;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -72,9 +75,38 @@ public class AuthController {
     @PostMapping("/verify-otp")
     public LoginResponse verifyOtp(
             @Valid @RequestBody VerifyOtpRequest request,
-            HttpServletRequest servletRequest) {
+            HttpServletRequest servletRequest,
+            HttpServletResponse servletResponse) {
         rateLimitService.check("verify-otp", clientKey(servletRequest, request.getEmail()), otpLimit);
-        return authService.verifyOtp(request);
+        return authService.verifyOtp(request, servletResponse);
+    }
+
+    @PostMapping("/logout")
+    public Map<String, String> logout(
+            HttpServletRequest servletRequest,
+            HttpServletResponse servletResponse) {
+        authService.logout(servletRequest, servletResponse);
+        return Map.of("message", "Logged out successfully");
+    }
+
+    @GetMapping("/csrf")
+    public Map<String, String> csrf(HttpServletRequest request, HttpServletResponse response) {
+        CsrfToken csrfToken = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
+        if (csrfToken == null) {
+            csrfToken = (CsrfToken) request.getAttribute("_csrf");
+        }
+        if (csrfToken != null) {
+            Cookie xsrfCookie = new Cookie("XSRF-TOKEN", csrfToken.getToken());
+            xsrfCookie.setPath("/");
+            xsrfCookie.setHttpOnly(false);
+            response.addCookie(xsrfCookie);
+
+            return Map.of(
+                    "token", csrfToken.getToken(),
+                    "headerName", csrfToken.getHeaderName(),
+                    "parameterName", csrfToken.getParameterName());
+        }
+        return Map.of();
     }
 
     @PostMapping("/resend-otp")

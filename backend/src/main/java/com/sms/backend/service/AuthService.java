@@ -2,6 +2,9 @@ package com.sms.backend.service;
 
 import com.sms.backend.dto.*;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
 public interface AuthService {
 
     LoginResponse login(LoginRequest request);
@@ -14,6 +17,10 @@ public interface AuthService {
 
     // ── OTP ───────────────────────────────────────────────────────
     LoginResponse verifyOtp(VerifyOtpRequest request);
+
+    LoginResponse verifyOtp(VerifyOtpRequest request, HttpServletResponse response);
+
+    void logout(HttpServletRequest request, HttpServletResponse response);
 
     String resendOtp(ResendOtpRequest request);
 

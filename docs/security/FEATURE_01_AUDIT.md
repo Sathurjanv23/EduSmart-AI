@@ -235,15 +235,20 @@ To prevent regressions during subsequent hardening tasks, two test suites were e
 - **Task 01.1 — Security Audit & Regression Baseline (`feature/01-1-security-audit`):**
   - COMPLETED and merged into `main` (PR #2, commit `e626b82`).
 - **Task 01.2 — Academic Access-Control Hardening (`feature/01-2-access-control`):**
-  - COMPLETED. See [FEATURE_01_2_ACCESS_CONTROL.md](./FEATURE_01_2_ACCESS_CONTROL.md) for complete details.
+  - COMPLETED and merged into `main` (PR #3, commit `ce2fb34`).
   - Granular route matchers implemented for `/api/students/**`, `/api/attendance/**`, and `/api/marks/**`.
   - Static file serving removed; replaced by authenticated and authorized `FileDownloadController`.
   - Record-level ownership checks enforced via `AcademicAccessService.requireFileAccess`.
   - Controller-level `requireAdmin` defense-in-depth added across admin mutation endpoints.
   - Backend test coverage expanded to 101 tests (all passing).
 - **Task 01.3 — Secure Sessions (`feature/01-3-secure-sessions`):**
-  - Migrate JWT from frontend `localStorage` to HttpOnly SameSite cookies.
-  - Implement CSRF protection and update CORS/credentials configuration.
+  - COMPLETED. See [FEATURE_01_3_SECURE_SESSIONS.md](./FEATURE_01_3_SECURE_SESSIONS.md) for full details.
+  - Migrated authentication tokens away from browser `localStorage` to secure `HttpOnly`, `SameSite=Lax` cookies (`sms_session`).
+  - Implemented CSRF protection via `CookieCsrfTokenRepository`, `CsrfTokenRequestAttributeHandler`, `CsrfCookieFilter`, and `/api/auth/csrf`.
+  - Added Fetch Metadata (`Sec-Fetch-Site`) and `Origin`/`Referer` validation defense-in-depth in `RequestOriginValidationFilter`.
+  - Added session revocation on logout via MongoDB TTL index and fast in-memory cache with zero database writes on read requests.
+  - Adapted frontend Axios client (`apiClient`) with `withCredentials: true`, automatic CSRF header attachment, and removal of token storage in `localStorage`.
+  - Backend test coverage expanded to 120 tests (all passing).
 - **Task 01.4 — CI & Production Security Baseline (`feature/01-4-security-ci`):**
   - Add dependency vulnerability scanners (e.g. `npm audit`, OWASP dependency-check / Trivy).
   - Document secret management, backups, and production deployment checklists.

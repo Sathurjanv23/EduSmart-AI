@@ -6,9 +6,8 @@ import {
   AuthResponse,
   AuthUser,
   getCurrentUser,
-  getToken,
+  logoutUser,
   Role,
-  saveToken,
 } from "@/app/services/authService";
 import { clearAuthToken } from "@/app/services/tokenStorage";
 import { ApiClientError } from "@/app/services/apiService";
@@ -22,7 +21,7 @@ interface AuthContextValue {
   authError: string;
   establishSession: (response: AuthResponse) => Promise<AuthUser>;
   refreshSession: () => Promise<AuthUser | null>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = React.createContext<AuthContextValue | undefined>(undefined);
@@ -60,13 +59,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = React.useState("");
 
   const refreshSession = React.useCallback(async () => {
-    if (!getToken()) {
-      setUser(null);
-      setStatus("unauthenticated");
-      setAuthError("");
-      return null;
-    }
-
     setStatus("loading");
     setAuthError("");
     try {
@@ -75,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setStatus("authenticated");
       return currentUser;
     } catch (unknownError: unknown) {
-      if (unknownError instanceof ApiClientError && unknownError.status === 401) {
+      if (unknownError instanceof ApiClientError && (unknownError.status === 401 || unknownError.status === 403)) {
         clearAuthToken();
         setUser(null);
         setStatus("unauthenticated");
@@ -101,8 +93,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const establishSession = React.useCallback(async (response: AuthResponse) => {
-    if (!response.token) throw new Error("The server did not return a session token.");
-    saveToken(response.token);
     try {
       // A safe login response avoids another round trip; reloads are verified via /me.
       const authenticatedUser = response.user
@@ -120,12 +110,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const signOut = React.useCallback(() => {
-    clearAuthToken();
-    setUser(null);
-    setStatus("unauthenticated");
-    setAuthError("");
-    window.location.assign("/login");
+  const signOut = React.useCallback(async () => {
+    try {
+      await logoutUser();
+    } catch {
+      // Continue cleanup
+    } finally {
+      clearAuthToken();
+      setUser(null);
+      setStatus("unauthenticated");
+      setAuthError("");
+      if (typeof window !== "undefined") {
+        window.location.assign("/login");
+      }
+    }
   }, []);
 
   const value = React.useMemo<AuthContextValue>(

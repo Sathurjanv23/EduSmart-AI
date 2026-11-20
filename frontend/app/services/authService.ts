@@ -58,7 +58,7 @@ export async function signupUser(signupData: {
   });
 }
 
-// VERIFY OTP (REGISTER or LOGIN_2FA) → returns JWT on success
+// VERIFY OTP (REGISTER or LOGIN_2FA) → returns session cookie on success
 export async function verifyOtp(payload: {
   email: string;
   otp: string;
@@ -108,17 +108,30 @@ export async function resetPassword(resetData: {
 }
 
 // SESSION MANAGEMENT
-export function saveToken(token: string) {
-  if (!token) throw new Error("The server did not return a session token.");
-  writeAuthToken(token);
+export function saveToken(token?: string) {
+  if (token) {
+    writeAuthToken(token);
+  }
 }
 
 export function getToken() {
   return readAuthToken();
 }
 
-export function logout() {
-  clearAuthToken();
+export async function logoutUser(): Promise<void> {
+  try {
+    await apiRequest<void>(`${API_BASE}/logout`, {
+      method: "POST",
+    });
+  } catch {
+    // Continue cleanup even if server request fails
+  } finally {
+    clearAuthToken();
+  }
+}
+
+export async function logout() {
+  await logoutUser();
   if (typeof window !== "undefined") window.location.assign("/login");
 }
 

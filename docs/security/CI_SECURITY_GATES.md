@@ -107,10 +107,12 @@ As of November 2026, the dependency baselines across the three tiers are:
 - `pip-audit --requirement requirements.txt` now operates as a **strictly blocking CI gate** with zero known CVEs.
 
 ### 4.2 Backend (`backend`)
-- **Status:** **Clean (0 Unaddressed Critical CVEs)**.
-- Java 17 and Spring Boot 3.5.13 parent POM manages enterprise dependencies with active security maintenance.
+- **Status:** **Remediated (0 Unmitigated Critical Vulnerabilities)**.
+- Upgraded `tomcat.version` to `10.1.59` in `backend/pom.xml`, resolving 8 critical Tomcat vulnerabilities (CVE-2026-41293, CVE-2026-43512, CVE-2026-43515, CVE-2026-55276, CVE-2026-65182, CVE-2026-65637, CVE-2026-65905, and CVE-2026-68525).
+- Upgraded `spring-framework.version` to `6.2.19`.
 - Trivy dependency scan (`aquasecurity/trivy-action@v0.36.0`) enforces a **blocking gate (`exit-code: 1`)** against Critical vulnerabilities in the Maven dependency tree.
 - Migrated CI action from deprecated `actions/setup-java@v4` to `actions/setup-java@v5`.
+- Verified non-exploitable framework exceptions (`CVE-2026-47884`, `CVE-2026-47890`) documented in Section 5 and scoped in `.trivyignore`.
 
 ### 4.3 Frontend (`frontend`)
 - **Status:** **Clean for Critical Production Vulnerabilities (0 Critical CVEs)**.
@@ -138,6 +140,13 @@ When a scanner reports a finding that is determined to be a false positive or no
 3. **Never Silently Ignore:**
    - Broad suppression flags (such as `--ignore-all` or blank exception lists) are strictly prohibited.
    - Secret scanners must use explicit path and regex allowlists in `.gitleaks.toml`.
+
+### 5.1 Documented Framework Exceptions
+
+| CVE Identifier | Package | Affected / Installed | Fixed In | Architecture Reachability & Mitigation Rationale |
+| :--- | :--- | :--- | :--- | :--- |
+| **CVE-2026-47884** | `org.springframework:spring-webmvc` | `6.2.19` (inherited from parent) | `7.0.9` | **Unreachable Attack Surface**: The vulnerability requires dynamic XSLT stylesheet evaluation via Spring's `XsltView`. CampusCore is architected entirely as a headless REST API utilizing `@RestController` and Jackson JSON serialization (`MappingJackson2HttpMessageConverter`). No XSLT views, view resolvers, or template engines are present or reachable. |
+| **CVE-2026-47890** | `org.springframework:spring-webmvc` | `6.2.19` (inherited from parent) | `7.0.9` | **Unreachable Attack Surface**: The vulnerability involves stream corruption during Server-Sent Events (SSE) combined with view-rendering contexts. CampusCore does not implement Server-Sent Events or SSE view streaming. |
 
 ---
 

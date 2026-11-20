@@ -42,19 +42,19 @@ class SecurityAuthorizationCharacterizationTest {
     @Autowired
     private RevokedTokenService revokedTokenService;
 
-    @org.springframework.boot.test.mock.mockito.MockBean
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     private UserRepository userRepository;
 
-    @org.springframework.boot.test.mock.mockito.MockBean
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     private com.sms.backend.service.StudentService studentService;
 
-    @org.springframework.boot.test.mock.mockito.MockBean
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     private com.sms.backend.repository.AssignmentSubmissionRepository assignmentSubmissionRepository;
 
-    @org.springframework.boot.test.mock.mockito.MockBean
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     private com.sms.backend.repository.AssignmentRepository assignmentRepository;
 
-    @org.springframework.boot.test.mock.mockito.MockBean
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     private com.sms.backend.repository.AnnouncementRepository announcementRepository;
 
     @Nested

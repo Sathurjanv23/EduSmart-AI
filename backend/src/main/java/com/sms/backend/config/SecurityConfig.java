@@ -21,6 +21,7 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sms.backend.exception.ApiErrorResponse;
 import com.sms.backend.security.CookieService;
+import com.sms.backend.security.CorrelationIdFilter;
 import com.sms.backend.security.CsrfCookieFilter;
 import com.sms.backend.security.RequestOriginValidationFilter;
 
@@ -108,7 +109,7 @@ public class SecurityConfig {
                     "/api/auth/verify-otp", "/api/auth/resend-otp",
                     "/api/auth/forgot-password", "/api/auth/reset-password",
                     "/api/auth/csrf").permitAll()
-                .requestMatchers("/actuator/health", "/actuator/info", "/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
+                .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
                 .requestMatchers("/api/auth/me", "/api/auth/logout").authenticated()
 
                 .requestMatchers("/api/admin/**").hasAuthority("ADMIN")
@@ -164,6 +165,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/notifications/*/read", "/api/notifications/user/*/read-all").authenticated()
                 .requestMatchers("/api/messages/**", "/api/notifications/**").hasAuthority("ADMIN")
                 .anyRequest().denyAll())
+            .addFilterBefore(new CorrelationIdFilter(), CsrfFilter.class)
             .addFilterBefore(requestOriginValidationFilter, CsrfFilter.class)
             .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class)
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

@@ -31,6 +31,11 @@ import com.sms.backend.model.User;
 import com.sms.backend.model.UserRole;
 import com.sms.backend.repository.OtpRepository;
 import com.sms.backend.repository.UserRepository;
+import com.sms.backend.security.CookieService;
+import com.sms.backend.security.RevokedTokenService;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -46,6 +51,8 @@ public class AuthServiceImpl implements AuthService {
     private final String dummyPasswordHash;
     private final JwtUtil jwtUtil;
     private final EmailService emailService;
+    private final CookieService cookieService;
+    private final RevokedTokenService revokedTokenService;
     private final long otpExpirySeconds;
     private final int maxAttempts;
     private final long resetTokenExpiryMinutes;
@@ -57,6 +64,8 @@ public class AuthServiceImpl implements AuthService {
             BCryptPasswordEncoder passwordEncoder,
             JwtUtil jwtUtil,
             EmailService emailService,
+            CookieService cookieService,
+            RevokedTokenService revokedTokenService,
             @Value("${app.auth.otp-expiry-seconds:300}") long otpExpirySeconds,
             @Value("${app.auth.otp-max-attempts:5}") int maxAttempts,
             @Value("${app.auth.reset-token-expiry-minutes:15}") long resetTokenExpiryMinutes,
@@ -70,6 +79,8 @@ public class AuthServiceImpl implements AuthService {
         this.dummyPasswordHash = passwordEncoder.encode("timing-only-" + UUID.randomUUID());
         this.jwtUtil = jwtUtil;
         this.emailService = emailService;
+        this.cookieService = cookieService;
+        this.revokedTokenService = revokedTokenService;
         this.otpExpirySeconds = otpExpirySeconds;
         this.maxAttempts = maxAttempts;
         this.resetTokenExpiryMinutes = resetTokenExpiryMinutes;
@@ -133,6 +144,11 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginResponse verifyOtp(VerifyOtpRequest request) {
+        return verifyOtp(request, null);
+    }
+
+    @Override
+    public LoginResponse verifyOtp(VerifyOtpRequest request, HttpServletResponse response) {
         String email = normalizeEmail(request.getEmail());
         String purpose = normalizePurpose(request.getPurpose());
         OtpStore otpStore = otpRepository.findByEmailAndPurpose(email, purpose)
@@ -166,7 +182,32 @@ public class AuthServiceImpl implements AuthService {
 
         otpRepository.deleteByEmailAndPurpose(email, purpose);
         String token = jwtUtil.generateToken(user.getEmail(), user.getRole().name());
+        if (response != null) {
+            cookieService.attachSessionCookie(response, token);
+            // Session token is strictly set via HttpOnly cookie; omitted from JSON response body
+            return new LoginResponse("Login successful", null, AuthenticatedUserResponse.from(user));
+        }
         return new LoginResponse("Login successful", token, AuthenticatedUserResponse.from(user));
+    }
+
+    @Override
+    public void logout(HttpServletRequest request, HttpServletResponse response) {
+        String token = cookieService.extractToken(request).orElse(null);
+        if (token == null && request != null) {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                token = authHeader.substring(7);
+            }
+        }
+        if (token != null) {
+            String tokenId = jwtUtil.extractTokenId(token);
+            Instant expiresAt = jwtUtil.extractExpiration(token);
+            revokedTokenService.revoke(tokenId, expiresAt);
+        }
+        if (response != null) {
+            cookieService.clearSessionCookie(response);
+        }
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
     }
 
     @Override

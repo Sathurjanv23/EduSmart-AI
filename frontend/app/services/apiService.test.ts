@@ -1,24 +1,38 @@
 import { AxiosError, InternalAxiosRequestConfig } from "axios";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./tokenStorage", () => ({
-  readAuthToken: vi.fn(() => "signed-jwt"),
+  readAuthToken: vi.fn(() => null),
   clearAuthToken: vi.fn(),
 }));
 
 import { apiClient } from "./apiService";
 
 describe("central API client", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-  it("automatically attaches the one stored JWT", async () => {
+  afterEach(() => {
+    delete (globalThis as { document?: unknown }).document;
+  });
+
+  it("enables credentials for secure HttpOnly cookie delivery", () => {
+    expect(apiClient.defaults.withCredentials).toBe(true);
+  });
+
+  it("automatically attaches CSRF token on state-changing requests", async () => {
     let captured: InternalAxiosRequestConfig | undefined;
     apiClient.defaults.adapter = async (config) => {
       captured = config;
       return { data: { ok: true }, status: 200, statusText: "OK", headers: {}, config };
     };
-    await apiClient.get("/students/me");
-    expect(captured?.headers.get("Authorization")).toBe("Bearer signed-jwt");
+    (globalThis as { document?: unknown }).document = {
+      cookie: "XSRF-TOKEN=test-csrf-token",
+    };
+
+    await apiClient.post("/attendance", { studentId: "s-1" });
+    expect(captured?.headers.get("X-XSRF-TOKEN")).toBe("test-csrf-token");
   });
 
   it.each([401, 403])("surfaces status %s as a typed error", async (status) => {

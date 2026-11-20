@@ -13,6 +13,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.sms.backend.model.User;
 import com.sms.backend.repository.UserRepository;
+import com.sms.backend.security.CookieService;
+import com.sms.backend.security.RevokedTokenService;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -23,10 +25,18 @@ import jakarta.servlet.http.HttpServletResponse;
 public class JwtFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
+    private final CookieService cookieService;
+    private final RevokedTokenService revokedTokenService;
 
-    public JwtFilter(JwtUtil jwtUtil, UserRepository userRepository) {
+    public JwtFilter(
+            JwtUtil jwtUtil,
+            UserRepository userRepository,
+            CookieService cookieService,
+            RevokedTokenService revokedTokenService) {
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
+        this.cookieService = cookieService;
+        this.revokedTokenService = revokedTokenService;
     }
 
     @Override
@@ -39,29 +49,33 @@ public class JwtFilter extends OncePerRequestFilter {
             return;
         }
 
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        String token = extractToken(request);
+        if (token == null) {
             filterChain.doFilter(request, response);
             return;
         }
 
         try {
-            String token = authHeader.substring(7);
             if (jwtUtil.isTokenValid(token)) {
-                String email = jwtUtil.extractEmail(token).toLowerCase(Locale.ROOT);
-                User user = userRepository.findByEmail(email).orElse(null);
-                if (user != null
-                        && user.getRole() != null
-                        && user.isEmailVerified()
-                        && "ACTIVE".equals(user.getStatus())
-                        && SecurityContextHolder.getContext().getAuthentication() == null) {
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    email,
-                                    null,
-                                    List.of(new SimpleGrantedAuthority(user.getRole().name())));
-                    authentication.setDetails(user.getId());
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                String tokenId = jwtUtil.extractTokenId(token);
+                if (!revokedTokenService.isRevoked(tokenId)) {
+                    String email = jwtUtil.extractEmail(token).toLowerCase(Locale.ROOT);
+                    User user = userRepository.findByEmail(email).orElse(null);
+                    if (user != null
+                            && user.getRole() != null
+                            && user.isEmailVerified()
+                            && "ACTIVE".equals(user.getStatus())
+                            && SecurityContextHolder.getContext().getAuthentication() == null) {
+                        UsernamePasswordAuthenticationToken authentication =
+                                new UsernamePasswordAuthenticationToken(
+                                        email,
+                                        null,
+                                        List.of(new SimpleGrantedAuthority(user.getRole().name())));
+                        authentication.setDetails(user.getId());
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                    }
+                } else {
+                    SecurityContextHolder.clearContext();
                 }
             }
         } catch (RuntimeException exception) {
@@ -69,5 +83,21 @@ public class JwtFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private String extractToken(HttpServletRequest request) {
+        // 1. Session Cookie (primary browser session mechanism)
+        String cookieToken = cookieService.extractToken(request).orElse(null);
+        if (cookieToken != null) {
+            return cookieToken;
+        }
+
+        // 2. Authorization Bearer header (programmatic / test client fallback)
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            return authHeader.substring(7);
+        }
+
+        return null;
     }
 }

@@ -4,7 +4,7 @@ import axios, {
   AxiosRequestConfig,
   InternalAxiosRequestConfig,
 } from "axios";
-import { clearAuthToken, readAuthToken } from "./tokenStorage";
+import { clearAuthToken } from "./tokenStorage";
 
 const configuredBaseUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
 
@@ -30,13 +30,68 @@ export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15_000,
   headers: { Accept: "application/json" },
+  withCredentials: true,
+  xsrfCookieName: "XSRF-TOKEN",
+  xsrfHeaderName: "X-XSRF-TOKEN",
 });
 
-apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = readAuthToken();
-  if (token) {
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp("(^|;\\s*)" + name + "=([^;]*)"));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
+let csrfTokenPromise: Promise<string | null> | null = null;
+let currentCsrfToken: string | null = null;
+
+export async function fetchCsrfToken(): Promise<string | null> {
+  const existingCookie = readCookie("XSRF-TOKEN");
+  if (existingCookie) {
+    currentCsrfToken = existingCookie;
+    return existingCookie;
+  }
+  if (currentCsrfToken) {
+    return currentCsrfToken;
+  }
+  if (!csrfTokenPromise) {
+    csrfTokenPromise = axios
+      .get<{ token?: string }>(`${API_BASE_URL}/auth/csrf`, {
+        withCredentials: true,
+      })
+      .then((res) => {
+        currentCsrfToken = res.data?.token || readCookie("XSRF-TOKEN");
+        return currentCsrfToken;
+      })
+      .catch(() => null)
+      .finally(() => {
+        csrfTokenPromise = null;
+      });
+  }
+  return csrfTokenPromise;
+}
+
+apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+  const method = config.method?.toLowerCase();
+  const isStateChanging = method && ["post", "put", "patch", "delete"].includes(method);
+  const requestUrl = config.url || "";
+  const isPublicAuth =
+    requestUrl.includes("/auth/login") ||
+    requestUrl.includes("/auth/signup") ||
+    requestUrl.includes("/auth/verify-otp") ||
+    requestUrl.includes("/auth/resend-otp") ||
+    requestUrl.includes("/auth/forgot-password") ||
+    requestUrl.includes("/auth/reset-password") ||
+    requestUrl.includes("/auth/csrf");
+
+  if (isStateChanging) {
     const headers = AxiosHeaders.from(config.headers);
-    headers.set("Authorization", `Bearer ${token}`);
+    if (!headers.has("X-XSRF-TOKEN") && !headers.has("X-CSRF-TOKEN")) {
+      const csrfToken = readCookie("XSRF-TOKEN") || currentCsrfToken || (!isPublicAuth ? await fetchCsrfToken() : null);
+      if (csrfToken) {
+        headers.set("X-XSRF-TOKEN", csrfToken);
+        headers.set("X-CSRF-TOKEN", csrfToken);
+      }
+    }
     config.headers = headers;
   }
   return config;
@@ -64,9 +119,8 @@ apiClient.interceptors.response.use(
 
     const status = unknownError.response?.status;
     const requestUrl = unknownError.config?.url || "";
-    const isAuthRequest = requestUrl.startsWith("/auth/");
-    const hasSession = Boolean(readAuthToken());
-    if (typeof window !== "undefined" && status === 401 && hasSession && !isAuthRequest) {
+    const isAuthRequest = requestUrl.startsWith("/auth/") && !requestUrl.startsWith("/auth/logout");
+    if (typeof window !== "undefined" && status === 401 && !isAuthRequest) {
       clearAuthToken();
       window.dispatchEvent(new Event("sms:session-expired"));
       const path = window.location.pathname;
@@ -74,6 +128,10 @@ apiClient.interceptors.response.use(
         const returnTo = `${path}${window.location.search}`;
         window.location.assign(`/login?returnTo=${encodeURIComponent(returnTo)}`);
       }
+    }
+
+    if (status === 403) {
+      currentCsrfToken = null;
     }
 
     const errorData = unknownError.response?.data as { code?: string } | undefined;

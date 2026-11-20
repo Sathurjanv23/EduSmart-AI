@@ -102,24 +102,23 @@ To adhere to the principle of least privilege and defend against malicious PR ta
 As of November 2026, the dependency baselines across the three tiers are:
 
 ### 4.1 ML Service (`ml-service`)
-- **Status:** **Monitored Baseline (Transitive Starlette Dependency)**.
-- `pip-audit` detects advisories in `starlette 0.46.2` (transitively pinned by `fastapi 0.115.12`).
-- **Triage & Threat Modeling:**
-  - The ML service is deployed **strictly within the internal Docker network** (`school-management-system_internal: true`) and does not expose port 8000 to the edge or host network.
-  - It receives requests exclusively from the trusted backend Spring Boot service via internal HTTP (`http://ml-service:8000`), completely shielding Starlette from untrusted public web traffic or direct browser interaction.
-  - `pip-audit` runs in CI with advisory warnings emitted (`::warning`), and upgrading to `fastapi >= 0.116` / `starlette >= 0.49` is scheduled for subsequent maintenance cycles to prevent breaking model serving schemas.
+- **Status:** **Clean (0 Known Vulnerabilities)**.
+- `fastapi` was updated to `0.165.0`, upgrading `starlette` to `1.10.0` and completely resolving all 14 previously flagged CVEs (including PYSEC-2026-1941, PYSEC-2026-1942, PYSEC-2026-161, PYSEC-2026-2280/2281, and PYSEC-2026-248/249).
+- `pip-audit --requirement requirements.txt` now operates as a **strictly blocking CI gate** with zero known CVEs.
 
 ### 4.2 Backend (`backend`)
-- **Status:** **Clean (0 unaddressed critical CVEs)**.
+- **Status:** **Clean (0 Unaddressed Critical CVEs)**.
 - Java 17 and Spring Boot 3.5.13 parent POM manages enterprise dependencies with active security maintenance.
-- Springdoc OpenAPI 2.8.9 and JJWT 0.11.5 have no active critical advisories.
+- Trivy dependency scan (`aquasecurity/trivy-action@v0.36.0`) enforces a **blocking gate (`exit-code: 1`)** against Critical vulnerabilities in the Maven dependency tree.
+- Migrated CI action from deprecated `actions/setup-java@v4` to `actions/setup-java@v5`.
 
 ### 4.3 Frontend (`frontend`)
-- **Upstream Framework Baseline:**
-  - `Next.js 15.5.21` (React 19 ecosystem): Like many enterprise deployments, upstream framework advisories are tracked in GitHub Advisory Database (e.g. Next.js image optimization or server action limits).
-  - Next.js is run in Docker behind Spring Boot; image optimization is not exposed to public untrusted uploads.
-- **Remediation Strategy:**
-  - Upstream framework minor upgrades are tested in scheduled maintenance windows to ensure zero regression in App Router routing and Netlify Next.js runtime adapters.
+- **Status:** **Clean for Critical Production Vulnerabilities (0 Critical CVEs)**.
+- Upgraded `next` to `15.5.29`, resolving all 3 critical unauthenticated Remote Code Execution advisories (GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4, GHSA-2464-fhr4-w9xw).
+- Upgraded `axios` to `1.21.1`, resolving all 12 Prototype Pollution, ReDoS, and HTTP/2 SSRF/DoS advisories (GHSA-vh66-26gq-q6x8, GHSA-c29m-xwm3-cm6r, GHSA-m8m8-qj5v-23w3, etc.).
+- Upgraded `source-map-js` to `1.2.2+` and `sharp` to clean releases.
+- Transitive build-time dependency `node_modules/next/node_modules/postcss` (High severity, non-critical) is monitored and tracked for future major Next.js 16 migrations.
+- `npm audit --omit=dev --audit-level=critical` now operates as a **strictly blocking CI gate**.
 
 ---
 

@@ -249,6 +249,16 @@ To prevent regressions during subsequent hardening tasks, two test suites were e
   - Added session revocation on logout via MongoDB TTL index and fast in-memory cache with zero database writes on read requests.
   - Adapted frontend Axios client (`apiClient`) with `withCredentials: true`, automatic CSRF header attachment, and removal of token storage in `localStorage`.
   - Backend test coverage expanded to 120 tests (all passing).
-- **Task 01.4 — CI & Production Security Baseline (`feature/01-4-security-ci`):**
-  - Add dependency vulnerability scanners (e.g. `npm audit`, OWASP dependency-check / Trivy).
-  - Document secret management, backups, and production deployment checklists.
+- **Task 01.4 — CI & Production Security Baseline:**
+  - **Task 01.4.1 — CI & Dependency Security (`feature/01-4-1-security-ci`):**
+    - COMPLETED. See [CI_SECURITY_GATES.md](./CI_SECURITY_GATES.md) for full details.
+    - Integrated Gitleaks secret scanning with `.gitleaks.toml` safe redaction and allowlist.
+    - Added GitHub Dependency Review action on pull request diffs for critical severity gates.
+    - Added production-scoped npm dependency vulnerability audits in the frontend pipeline.
+    - Added Trivy vulnerability scanning for Java Maven dependencies in the backend pipeline.
+    - Added PyPA `pip-audit` for runtime dependencies in the ML service pipeline.
+    - Enforced least-privilege `contents: read` permissions across all GitHub Actions jobs.
+  - **Task 01.4.2 — Session Reliability & Deployment Verification (`feature/01-4-2-session-reliability`):**
+    - Verify cross-site and same-origin session reliability across deployment topologies and instances.
+  - **Task 01.4.3 — Production Readiness & Operations (`feature/01-4-3-production-readiness`):**
+    - Document secret management, MongoDB backups, restore verification, monitoring alerts, and deployment runbooks.

@@ -1,0 +1,24 @@
+# Gitleaks Configuration for EduSmart-AI (CampusCore)
+title = "EduSmart-AI Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist for documentation, sample configuration, and test fixtures"
+paths = [
+  '''(?i)(^|/)\.env\.example$''',
+  '''(?i)(^|/)docs/.*\.md$''',
+  '''(?i)(^|/)README\.md$''',
+  '''(?i)(^|/)SETUP_GUIDE\.md$''',
+  '''(?i)(^|/)FEATURE_IMPLEMENTATION_GUIDE\.md$''',
+  '''(?i)(^|/).*\.test\.(ts|tsx|js)$''',
+  '''(?i)(^|/)src/test/.*'''
+]
+regexes = [
+  '''ci-only-secret-replace-me-32-characters-minimum''',
+  '''replace-with-at-least-32-random-characters''',
+  '''replace-with-a-strong-local-password''',
+  '''DemoOnly!234''',
+  '''test-jwt-secret-key-32-characters-long'''
+]

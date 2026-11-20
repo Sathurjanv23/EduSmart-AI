@@ -22,10 +22,10 @@ import com.sms.backend.dto.ResetPasswordRequest;
 import com.sms.backend.dto.SignupRequest;
 import com.sms.backend.dto.SignupResponse;
 import com.sms.backend.dto.VerifyOtpRequest;
+import com.sms.backend.security.CookieService;
 import com.sms.backend.security.RateLimitService;
 import com.sms.backend.service.AuthService;
 
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -36,6 +36,7 @@ import org.springframework.security.web.csrf.CsrfToken;
 public class AuthController {
     private final AuthService authService;
     private final RateLimitService rateLimitService;
+    private final CookieService cookieService;
     private final int loginLimit;
     private final int otpLimit;
     private final int passwordResetLimit;
@@ -43,6 +44,7 @@ public class AuthController {
     public AuthController(
             AuthService authService,
             RateLimitService rateLimitService,
+            CookieService cookieService,
             @Value("${app.auth.login-rate-limit:10}") int loginLimit,
             @Value("${app.auth.otp-rate-limit:10}") int otpLimit,
             @Value("${app.auth.password-reset-rate-limit:5}") int passwordResetLimit) {
@@ -51,6 +53,7 @@ public class AuthController {
         }
         this.authService = authService;
         this.rateLimitService = rateLimitService;
+        this.cookieService = cookieService;
         this.loginLimit = loginLimit;
         this.otpLimit = otpLimit;
         this.passwordResetLimit = passwordResetLimit;
@@ -96,10 +99,7 @@ public class AuthController {
             csrfToken = (CsrfToken) request.getAttribute("_csrf");
         }
         if (csrfToken != null) {
-            Cookie xsrfCookie = new Cookie("XSRF-TOKEN", csrfToken.getToken());
-            xsrfCookie.setPath("/");
-            xsrfCookie.setHttpOnly(false);
-            response.addCookie(xsrfCookie);
+            cookieService.attachCsrfCookie(response, csrfToken.getToken());
 
             return Map.of(
                     "token", csrfToken.getToken(),

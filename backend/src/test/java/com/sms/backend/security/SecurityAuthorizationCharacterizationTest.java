@@ -1,5 +1,6 @@
 package com.sms.backend.security;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -551,6 +552,97 @@ class SecurityAuthorizationCharacterizationTest {
                             .cookie(new Cookie("sms_session", token)))
                     .andExpect(status().isUnauthorized());
         }
+
+        @Test
+        void meWithExpiredSessionCookieReturnsUnauthorized() throws Exception {
+            String expiredToken = io.jsonwebtoken.Jwts.builder()
+                    .setSubject("student@campuscore.local")
+                    .claim("role", "STUDENT")
+                    .setIssuedAt(new java.util.Date(System.currentTimeMillis() - 100000))
+                    .setExpiration(new java.util.Date(System.currentTimeMillis() - 50000))
+                    .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor("test-only-secret-with-at-least-thirty-two-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8)), io.jsonwebtoken.SignatureAlgorithm.HS256)
+                    .compact();
+
+            mockMvc.perform(get("/api/auth/me")
+                            .cookie(new Cookie("sms_session", expiredToken)))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        void completeSessionLifecycleE2EFlow() throws Exception {
+            User user = new User();
+            user.setId("u-lifecycle");
+            user.setName("Lifecycle Student");
+            user.setEmail("lifecycle@campuscore.local");
+            user.setRole(UserRole.STUDENT);
+            user.setEmailVerified(true);
+            user.setStatus("ACTIVE");
+            org.mockito.Mockito.when(userRepository.findByEmail("lifecycle@campuscore.local"))
+                    .thenReturn(Optional.of(user));
+
+            String token = jwtUtil.generateToken("lifecycle@campuscore.local", "STUDENT");
+
+            // 1. Initial access with valid session cookie succeeds
+            mockMvc.perform(get("/api/auth/me")
+                            .cookie(new Cookie("sms_session", token)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.email").value("lifecycle@campuscore.local"));
+
+            // 2. Protected resource access with valid cookie succeeds
+            mockMvc.perform(get("/api/announcements")
+                            .cookie(new Cookie("sms_session", token)))
+                    .andExpect(status().isOk());
+
+            // 3. Logout revokes session and clears cookie
+            mockMvc.perform(post("/api/auth/logout")
+                            .cookie(new Cookie("sms_session", token))
+                            .with(csrf()))
+                    .andExpect(status().isOk())
+                    .andExpect(cookie().maxAge("sms_session", 0));
+
+            // 4. Reusing the session token is rejected with 401
+            mockMvc.perform(get("/api/auth/me")
+                            .cookie(new Cookie("sms_session", token)))
+                    .andExpect(status().isUnauthorized());
+
+            mockMvc.perform(get("/api/announcements")
+                            .cookie(new Cookie("sms_session", token)))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        void concurrentSessionRequestsExecuteSafely() throws Exception {
+            User user = new User();
+            user.setId("u-concurrent");
+            user.setName("Concurrent Student");
+            user.setEmail("concurrent@campuscore.local");
+            user.setRole(UserRole.STUDENT);
+            user.setEmailVerified(true);
+            user.setStatus("ACTIVE");
+            org.mockito.Mockito.when(userRepository.findByEmail("concurrent@campuscore.local"))
+                    .thenReturn(Optional.of(user));
+
+            String token = jwtUtil.generateToken("concurrent@campuscore.local", "STUDENT");
+
+            int threads = 10;
+            java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(threads);
+            java.util.List<java.util.concurrent.Future<Integer>> futures = new java.util.ArrayList<>();
+
+            for (int i = 0; i < threads; i++) {
+                futures.add(executor.submit(() -> {
+                    return mockMvc.perform(get("/api/auth/me")
+                                    .cookie(new Cookie("sms_session", token)))
+                            .andReturn()
+                            .getResponse()
+                            .getStatus();
+                }));
+            }
+
+            for (java.util.concurrent.Future<Integer> future : futures) {
+                assertEquals(200, future.get(5, java.util.concurrent.TimeUnit.SECONDS));
+            }
+            executor.shutdown();
+        }
     }
 
     @Nested
@@ -562,7 +654,9 @@ class SecurityAuthorizationCharacterizationTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.token").isNotEmpty())
                     .andExpect(jsonPath("$.headerName").value("X-CSRF-TOKEN"))
-                    .andExpect(cookie().exists("XSRF-TOKEN"));
+                    .andExpect(cookie().exists("XSRF-TOKEN"))
+                    .andExpect(cookie().httpOnly("XSRF-TOKEN", false))
+                    .andExpect(cookie().path("XSRF-TOKEN", "/"));
         }
 
         @Test

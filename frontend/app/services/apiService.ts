@@ -110,6 +110,12 @@ function getErrorMessage(error: AxiosError<{ message?: string; error?: string }>
   return error.message || "The request failed.";
 }
 
+let isRedirectingToLogin = false;
+
+export function resetRedirectForTesting() {
+  isRedirectingToLogin = false;
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   (unknownError: unknown) => {
@@ -124,7 +130,8 @@ apiClient.interceptors.response.use(
       clearAuthToken();
       window.dispatchEvent(new Event("sms:session-expired"));
       const path = window.location.pathname;
-      if (path !== "/login" && !path.startsWith("/reset-password")) {
+      if (!isRedirectingToLogin && path !== "/login" && !path.startsWith("/reset-password")) {
+        isRedirectingToLogin = true;
         const returnTo = `${path}${window.location.search}`;
         window.location.assign(`/login?returnTo=${encodeURIComponent(returnTo)}`);
       }

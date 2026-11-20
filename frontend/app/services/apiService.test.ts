@@ -47,4 +47,32 @@ describe("central API client", () => {
     };
     await expect(apiClient.get("/protected")).rejects.toMatchObject({ status });
   });
+
+  it("debounces 401 login redirects across concurrent failing requests", async () => {
+    const assignMock = vi.fn();
+    (globalThis as { window?: unknown }).window = {
+      location: { pathname: "/dashboard", search: "", assign: assignMock },
+      dispatchEvent: vi.fn(),
+    };
+
+    apiClient.defaults.adapter = async (config) => {
+      throw new AxiosError("Session expired", undefined, config, undefined, {
+        data: { message: "Session expired" },
+        status: 401,
+        statusText: "Unauthorized",
+        headers: {},
+        config,
+      });
+    };
+
+    const results = await Promise.allSettled([
+      apiClient.get("/dashboard/stats"),
+      apiClient.get("/dashboard/announcements"),
+      apiClient.get("/dashboard/profile"),
+    ]);
+
+    expect(results.every((r) => r.status === "rejected")).toBe(true);
+    expect(assignMock).toHaveBeenCalledTimes(1);
+    delete (globalThis as { window?: unknown }).window;
+  });
 });

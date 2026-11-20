@@ -73,6 +73,9 @@ public class SecurityConfig {
         tokenRepository.setCookieCustomizer(cookie -> {
             cookie.sameSite(cookieService.getSameSite());
             cookie.secure(cookieService.isCookieSecure());
+            if (cookieService.getDomain() != null) {
+                cookie.domain(cookieService.getDomain());
+            }
         });
 
         CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();

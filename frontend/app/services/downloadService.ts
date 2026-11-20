@@ -15,11 +15,22 @@ function backendFileUrl(fileUrl: string): string {
 
 export async function downloadProtectedFile(fileUrl: string, suggestedName = "attachment") {
   const response = await apiClient.get<Blob>(backendFileUrl(fileUrl), { responseType: "blob" });
+  let resolvedName = suggestedName;
+  const contentDisposition =
+    response.headers?.["content-disposition"] ||
+    (typeof response.headers?.get === "function" ? response.headers.get("content-disposition") : undefined);
+  if (typeof contentDisposition === "string") {
+    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i);
+    if (filenameMatch && filenameMatch[1]) {
+      resolvedName = filenameMatch[1].replace(/['"]/g, "").trim();
+    }
+  }
+
   const objectUrl = URL.createObjectURL(response.data);
   try {
     const anchor = document.createElement("a");
     anchor.href = objectUrl;
-    anchor.download = suggestedName;
+    anchor.download = resolvedName;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();

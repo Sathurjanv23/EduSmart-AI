@@ -251,7 +251,7 @@ To prevent regressions during subsequent hardening tasks, two test suites were e
   - Backend test coverage expanded to 120 tests (all passing).
 - **Task 01.4 — CI & Production Security Baseline:**
   - **Task 01.4.1 — CI & Dependency Security (`feature/01-4-1-security-ci`):**
-    - COMPLETED. See [CI_SECURITY_GATES.md](./CI_SECURITY_GATES.md) for full details.
+    - COMPLETED and merged into `main` (PR #5, commit `d77dae8`). See [CI_SECURITY_GATES.md](./CI_SECURITY_GATES.md) for full details.
     - Integrated Gitleaks secret scanning with `.gitleaks.toml` safe redaction and allowlist.
     - Added GitHub Dependency Review action on pull request diffs for critical severity gates.
     - Added production-scoped npm dependency vulnerability audits in the frontend pipeline.
@@ -259,6 +259,12 @@ To prevent regressions during subsequent hardening tasks, two test suites were e
     - Added PyPA `pip-audit` for runtime dependencies in the ML service pipeline.
     - Enforced least-privilege `contents: read` permissions across all GitHub Actions jobs.
   - **Task 01.4.2 — Session Reliability & Deployment Verification (`feature/01-4-2-session-reliability`):**
-    - Verify cross-site and same-origin session reliability across deployment topologies and instances.
+    - COMPLETED. See [SESSION_DEPLOYMENT.md](./SESSION_DEPLOYMENT.md) for comprehensive topology guides.
+    - Verified direct-API, subdomain, and reverse-proxy/BFF deployment topologies and cookie attribute policies.
+    - Harmonized CSRF cookie generation in `CookieService` and `AuthController` with consistent `SameSite`, `Secure`, and `Domain` properties.
+    - Added `Content-Disposition` to `CorsConfig.java` exposed headers for authenticated cross-origin download inspection.
+    - Added debounce protection against concurrent 401 redirection storms in frontend `apiService.ts`.
+    - Enhanced frontend `downloadService.ts` to parse dynamic `Content-Disposition` filenames with robust fallback.
+    - Added end-to-end integration characterization tests covering full session lifecycle (login -> access -> expiry -> logout -> denied reuse), concurrent session execution, and CSRF cookie attributes.
   - **Task 01.4.3 — Production Readiness & Operations (`feature/01-4-3-production-readiness`):**
-    - Document secret management, MongoDB backups, restore verification, monitoring alerts, and deployment runbooks.
+    - Pending merge of PR 01.4.2. Will configure production environment validation, rate limiting, and container hardening.

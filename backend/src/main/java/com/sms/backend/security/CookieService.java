@@ -27,6 +27,9 @@ public class CookieService {
             @Value("${security.cookie.same-site:Lax}") String sameSite,
             @Value("${security.cookie.domain:}") String domain,
             @Value("${security.jwt.expiration-ms:86400000}") long expirationMs) {
+        if ("None".equalsIgnoreCase(sameSite) && !cookieSecure) {
+            throw new IllegalStateException("SameSite=None cookies require secure=true per browser cookie policies");
+        }
         this.cookieName = cookieName;
         this.cookieSecure = cookieSecure;
         this.sameSite = sameSite;
@@ -44,6 +47,23 @@ public class CookieService {
 
     public String getSameSite() {
         return sameSite;
+    }
+
+    public String getDomain() {
+        return domain;
+    }
+
+    public void attachCsrfCookie(HttpServletResponse response, String csrfToken) {
+        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from("XSRF-TOKEN", csrfToken)
+                .httpOnly(false)
+                .secure(cookieSecure)
+                .sameSite(sameSite)
+                .path("/")
+                .maxAge(Duration.ofMillis(expirationMs));
+        if (domain != null) {
+            builder.domain(domain);
+        }
+        response.addHeader(HttpHeaders.SET_COOKIE, builder.build().toString());
     }
 
     public void attachSessionCookie(HttpServletResponse response, String token) {

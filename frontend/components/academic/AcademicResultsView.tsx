@@ -211,7 +211,8 @@ export default function AcademicResultsView({
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              onClick={() => exportResultsToCsv(studentName, studentClass, marks)}
+              onClick={() => exportResultsToCsv(studentName, studentClass, filteredMarks.length > 0 ? filteredMarks : marks)}
+              aria-label="Download results as CSV spreadsheet"
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             >
               <Download className="h-4 w-4 text-emerald-600" />
@@ -220,6 +221,7 @@ export default function AcademicResultsView({
             <button
               type="button"
               onClick={() => window.print()}
+              aria-label="Print results report"
               className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
             >
               <Printer className="h-4 w-4" />

@@ -11,13 +11,15 @@ public interface MarksRepository extends MongoRepository<Marks, String> {
     List<Marks> findByStudentIdOrderByRecordedAtDesc(String studentId);
     List<Marks> findByClassId(String classId);
 
-    // Queries for teacher roster / marks entry (Task 02.1 & 02.2)
+    // Queries for teacher roster / marks entry (Task 02.1 & 02.2 & 02.3)
     List<Marks> findByClassIdAndSubjectIgnoreCaseOrderByStudentNameAsc(String classId, String subject);
     List<Marks> findByClassIdAndSubjectIgnoreCaseAndExamIdOrderByStudentNameAsc(String classId, String subject, String examId);
+    List<Marks> findByClassIdAndSubjectIgnoreCaseAndAssessmentIdOrderByStudentNameAsc(String classId, String subject, String assessmentId);
 
     // Student & Parent portal query: only returns records in published status (Task 02.1 privacy foundation & Task 02.3/02.4)
     List<Marks> findByStudentIdAndStatusOrderByRecordedAtDesc(String studentId, String status);
 
     // Duplicate prevention checks
     Optional<Marks> findByStudentIdAndSubjectIgnoreCaseAndExamId(String studentId, String subject, String examId);
+    Optional<Marks> findByStudentIdAndSubjectIgnoreCaseAndAssessmentId(String studentId, String subject, String assessmentId);
 }

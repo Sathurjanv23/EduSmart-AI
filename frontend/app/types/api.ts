@@ -45,6 +45,7 @@ export interface MarkRecord {
   subject: string;
   assessmentType?: AssessmentType;
   term?: string;
+  assessmentId?: string;
   marks?: number;
   marksObtained?: number;
   totalMarks?: number;
@@ -56,6 +57,30 @@ export interface MarkRecord {
   recordedBy?: string;
   recordedAt?: string;
   updatedAt?: string;
+}
+
+export interface PublishMarksInput {
+  classId: string;
+  subject: string;
+  examId?: string;
+  assessmentType?: AssessmentType;
+  term?: string;
+  assessmentId?: string;
+  markIds?: string[];
+  allowPartial?: boolean;
+}
+
+export interface PublishMarksResponse {
+  classId: string;
+  subject: string;
+  examId?: string;
+  assessmentId?: string;
+  publishedCount: number;
+  alreadyPublishedCount: number;
+  totalTargeted: number;
+  publishedIds: string[];
+  alreadyPublishedIds: string[];
+  message: string;
 }
 
 export interface Exam {

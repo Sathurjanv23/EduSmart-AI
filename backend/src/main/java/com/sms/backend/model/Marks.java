@@ -26,7 +26,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Document(collection = "marks")
 @CompoundIndexes({
     @CompoundIndex(name = "idx_marks_class_subject", def = "{'classId': 1, 'subject': 1}"),
-    @CompoundIndex(name = "idx_marks_student_subject_exam", def = "{'studentId': 1, 'subject': 1, 'examId': 1}", unique = true, sparse = true)
+    @CompoundIndex(name = "idx_marks_student_subject_exam", def = "{'studentId': 1, 'subject': 1, 'examId': 1}", unique = true, sparse = true),
+    @CompoundIndex(name = "idx_marks_student_subject_assessment", def = "{'studentId': 1, 'subject': 1, 'assessmentId': 1}", unique = true, sparse = true)
 })
 public class Marks {
     @Id
@@ -44,6 +45,13 @@ public class Marks {
 
     @Indexed
     private String examId;
+
+    /**
+     * Unique identifier for the assessment event within a subject/class.
+     * For exams, equals examId. For non-exam assessments, formatted as "{assessmentType}#{term}" or custom ID.
+     */
+    @Indexed
+    private String assessmentId;
 
     @Indexed
     private String subject;
@@ -100,6 +108,25 @@ public class Marks {
 
     public String getExamId() { return examId; }
     public void setExamId(String examId) { this.examId = examId; }
+
+    public String getAssessmentId() { return assessmentId; }
+    public void setAssessmentId(String assessmentId) { this.assessmentId = assessmentId; }
+
+    /**
+     * Resolves the effective assessment identifier for duplicate detection and grouping.
+     * Guaranteed non-null and backward-compatible with legacy records.
+     */
+    public String getEffectiveAssessmentId() {
+        if (assessmentId != null && !assessmentId.isBlank()) {
+            return assessmentId;
+        }
+        if (examId != null && !examId.isBlank()) {
+            return examId;
+        }
+        String typePart = (assessmentType != null && !assessmentType.isBlank()) ? assessmentType : "GENERAL";
+        String termPart = (term != null && !term.isBlank()) ? term : "T1";
+        return typePart + "#" + termPart;
+    }
 
     public String getSubject() { return subject; }
     public void setSubject(String subject) { this.subject = subject; }

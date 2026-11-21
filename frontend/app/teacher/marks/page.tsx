@@ -6,17 +6,23 @@ import {
   CheckCircle2,
   FileText,
   Search,
-  AlertCircle
+  AlertCircle,
+  Send,
+  AlertTriangle,
+  X,
+  Lock,
+  Check,
 } from "lucide-react";
 import {
   addMarks,
   getMarksByClassAndSubject,
   MarksInput,
-  updateMarks
+  publishMarks,
+  updateMarks,
 } from "@/app/services/marksService";
 import { getTeacherClassStudents, getTeacherProfile, TeacherProfile } from "@/app/services/teacherService";
 import { getExamsByClass } from "@/app/services/examService";
-import { AssessmentType, Exam, MarkRecord, Student } from "@/app/types/api";
+import { AssessmentType, Exam, MarkRecord, PublishMarksInput, Student } from "@/app/types/api";
 import { EmptyState, ErrorState, InlineNotice, LoadingState } from "@/components/AsyncState";
 
 interface StudentRowState {
@@ -55,6 +61,9 @@ export default function TeacherMarksWorkspacePage() {
   const [loading, setLoading] = useState(true);
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [confirmPartial, setConfirmPartial] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -116,75 +125,75 @@ export default function TeacherMarksWorkspacePage() {
     }
   }, [selectedExamId, exams, selectedSubject]);
 
-  // 3. Load Students & Existing Marks when Class or Subject changes
-  useEffect(() => {
+  // 3. Load Students & Existing Marks when context changes
+  const loadStudentsAndMarks = useCallback(async () => {
     if (!selectedClass || !selectedSubject) {
       setStudents([]);
       setRowStates({});
       return;
     }
 
-    let active = true;
     setLoadingRoster(true);
     setError("");
     setNotice("");
 
-    Promise.all([
-      getTeacherClassStudents(selectedClass),
-      getMarksByClassAndSubject(selectedClass, selectedSubject, selectedExamId || undefined),
-    ])
-      .then(([roster, existingMarks]) => {
-        if (!active) return;
-        // Keep roster sorted deterministically by student name
-        const sortedRoster = [...roster].sort((a, b) => a.name.localeCompare(b.name));
-        setStudents(sortedRoster);
+    try {
+      const [roster, existingMarks] = await Promise.all([
+        getTeacherClassStudents(selectedClass),
+        getMarksByClassAndSubject(
+          selectedClass,
+          selectedSubject,
+          selectedExamId || undefined,
+          !selectedExamId ? assessmentType : undefined,
+          !selectedExamId ? term : undefined
+        ),
+      ]);
 
-        // Map existing marks by studentId
-        const marksByStudentId = new Map<string, MarkRecord>();
-        existingMarks.forEach((m) => {
-          if (m.studentId) {
-            marksByStudentId.set(m.studentId, m);
-          }
-        });
+      const sortedRoster = [...roster].sort((a, b) => a.name.localeCompare(b.name));
+      setStudents(sortedRoster);
 
-        const initialRows: Record<string, StudentRowState> = {};
-        sortedRoster.forEach((student) => {
-          const existing = marksByStudentId.get(student.id);
-          if (existing) {
-            const score = existing.marksObtained ?? existing.marks;
-            initialRows[student.id] = {
-              marks: score !== undefined ? String(score) : "",
-              totalMarks: existing.totalMarks || defaultTotalMarks,
-              comments: existing.comments || "",
-              existingId: existing.id,
-              status: existing.status || "DRAFT",
-              isDirty: false,
-            };
-          } else {
-            initialRows[student.id] = {
-              marks: "",
-              totalMarks: defaultTotalMarks,
-              comments: "",
-              status: "UNSAVED",
-              isDirty: false,
-            };
-          }
-        });
-        setRowStates(initialRows);
-      })
-      .catch((err: unknown) => {
-        if (active) {
-          setError(err instanceof Error ? err.message : "Could not load students or marks.");
+      // Map existing marks by studentId
+      const marksByStudentId = new Map<string, MarkRecord>();
+      existingMarks.forEach((m) => {
+        if (m.studentId) {
+          marksByStudentId.set(m.studentId, m);
         }
-      })
-      .finally(() => {
-        if (active) setLoadingRoster(false);
       });
 
-    return () => {
-      active = false;
-    };
-  }, [selectedClass, selectedSubject, selectedExamId, defaultTotalMarks]);
+      const initialRows: Record<string, StudentRowState> = {};
+      sortedRoster.forEach((student) => {
+        const existing = marksByStudentId.get(student.id);
+        if (existing) {
+          const score = existing.marksObtained ?? existing.marks;
+          initialRows[student.id] = {
+            marks: score !== undefined ? String(score) : "",
+            totalMarks: existing.totalMarks || defaultTotalMarks,
+            comments: existing.comments || "",
+            existingId: existing.id,
+            status: existing.status || "DRAFT",
+            isDirty: false,
+          };
+        } else {
+          initialRows[student.id] = {
+            marks: "",
+            totalMarks: defaultTotalMarks,
+            comments: "",
+            status: "UNSAVED",
+            isDirty: false,
+          };
+        }
+      });
+      setRowStates(initialRows);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not load students or marks.");
+    } finally {
+      setLoadingRoster(false);
+    }
+  }, [selectedClass, selectedSubject, selectedExamId, assessmentType, term, defaultTotalMarks]);
+
+  useEffect(() => {
+    void loadStudentsAndMarks();
+  }, [loadStudentsAndMarks]);
 
   // Check for unsaved changes before switching contexts
   const hasUnsavedChanges = useMemo(() => {
@@ -217,6 +226,24 @@ export default function TeacherMarksWorkspacePage() {
       }
     }
     setSelectedExamId(newExamId);
+  };
+
+  const handleCategoryChange = (newCategory: AssessmentType) => {
+    if (hasUnsavedChanges) {
+      if (!window.confirm("You have unsaved marks. Discard them and switch category?")) {
+        return;
+      }
+    }
+    setAssessmentType(newCategory);
+  };
+
+  const handleTermChange = (newTerm: string) => {
+    if (hasUnsavedChanges) {
+      if (!window.confirm("You have unsaved marks. Discard them and switch term?")) {
+        return;
+      }
+    }
+    setTerm(newTerm);
   };
 
   // Row update handlers
@@ -299,7 +326,7 @@ export default function TeacherMarksWorkspacePage() {
         totalMarks: row.totalMarks || defaultTotalMarks,
         examId: selectedExamId ? selectedExamId : undefined,
         assessmentType: !selectedExamId ? assessmentType : undefined,
-        term: term || undefined,
+        term: !selectedExamId ? term : undefined,
         comments: row.comments || undefined,
       };
 
@@ -337,6 +364,47 @@ export default function TeacherMarksWorkspacePage() {
     }
   };
 
+  // Safe Publication Action
+  const handlePublish = async () => {
+    if (hasUnsavedChanges) {
+      setError("Please save your draft changes before publishing.");
+      return;
+    }
+
+    setPublishing(true);
+    setError("");
+    setNotice("");
+
+    const eligibleDraftIds = students
+      .map((s) => rowStates[s.id])
+      .filter((row): row is StudentRowState => Boolean(row && row.existingId && row.status === "DRAFT"))
+      .map((row) => row.existingId as string);
+
+    const payload: PublishMarksInput = {
+      classId: selectedClass,
+      subject: selectedSubject,
+      examId: selectedExamId ? selectedExamId : undefined,
+      assessmentType: !selectedExamId ? assessmentType : undefined,
+      term: !selectedExamId ? term : undefined,
+      markIds: eligibleDraftIds.length > 0 ? eligibleDraftIds : undefined,
+      allowPartial: confirmPartial || stats.missingCount === 0,
+    };
+
+    try {
+      const response = await publishMarks(payload);
+      setShowPublishModal(false);
+      setConfirmPartial(false);
+      setNotice(response.message || `Successfully published ${response.publishedCount} marks.`);
+      await loadStudentsAndMarks();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to publish marks.");
+      // Refresh server state so teacher inspects current authoritative state before retry
+      await loadStudentsAndMarks();
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   // Filter roster by search term
   const filteredStudents = useMemo(() => {
     if (!searchTerm.trim()) return students;
@@ -346,18 +414,27 @@ export default function TeacherMarksWorkspacePage() {
     );
   }, [students, searchTerm]);
 
-  // Statistics
+  // Statistics & Publication Readiness
   const stats = useMemo(() => {
     const total = students.length;
     let filled = 0;
     let sum = 0;
     let countWithMarks = 0;
     let publishedCount = 0;
+    let draftCount = 0;
+    let unsavedCount = 0;
 
     students.forEach((s) => {
       const row = rowStates[s.id];
       if (row) {
-        if (row.status === "PUBLISHED") publishedCount++;
+        if (row.isDirty) {
+          unsavedCount++;
+        }
+        if (row.status === "PUBLISHED") {
+          publishedCount++;
+        } else if (row.status === "DRAFT" && !row.isDirty) {
+          draftCount++;
+        }
         if (row.marks.trim() !== "" && !row.rowError) {
           filled++;
           const score = parseInt(row.marks, 10);
@@ -370,8 +447,20 @@ export default function TeacherMarksWorkspacePage() {
     });
 
     const average = countWithMarks > 0 ? Math.round(sum / countWithMarks) : null;
-    return { total, filled, average, publishedCount };
+    const missingCount = Math.max(0, total - (publishedCount + draftCount));
+    const isAllPublished = total > 0 && publishedCount === total;
+
+    return { total, filled, average, publishedCount, draftCount, unsavedCount, missingCount, isAllPublished };
   }, [students, rowStates]);
+
+  const activeAssessmentTitle = useMemo(() => {
+    if (selectedExamId) {
+      const ex = exams.find((e) => e.id === selectedExamId);
+      return ex ? `${ex.title} (${ex.totalMarks} Marks)` : "Selected Exam";
+    }
+    const cat = ASSESSMENT_TYPES.find((t) => t.value === assessmentType)?.label || assessmentType;
+    return `${cat} · ${term}`;
+  }, [selectedExamId, exams, assessmentType, term]);
 
   if (loading) {
     return <LoadingState label="Loading teacher marks workspace…" />;
@@ -403,17 +492,50 @@ export default function TeacherMarksWorkspacePage() {
             Record, evaluate, and save academic marks drafts for students in your authorized classes.
           </p>
         </div>
-        {hasUnsavedChanges && (
-          <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-4 py-2 text-xs font-bold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-            <AlertCircle className="h-4 w-4" />
-            Unsaved changes present
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {hasUnsavedChanges && (
+            <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-4 py-2 text-xs font-bold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              <AlertCircle className="h-4 w-4" />
+              Unsaved changes present
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmPartial(false);
+              setShowPublishModal(true);
+            }}
+            disabled={publishing || saving || loadingRoster || hasUnsavedChanges || stats.draftCount === 0}
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-emerald-700 disabled:opacity-50"
+            title={
+              hasUnsavedChanges
+                ? "Save all draft changes first before publishing."
+                : stats.draftCount === 0
+                ? "No draft records available to publish."
+                : "Publish marks to students and parents"
+            }
+          >
+            <Send className="h-4 w-4" />
+            Publish Results
+          </button>
+        </div>
       </header>
 
       {/* Global Notices */}
       {notice && <InlineNotice message={notice} tone="success" />}
       {error && <InlineNotice message={error} tone="error" />}
+
+      {/* Missing Marks Alert Banner */}
+      {!loadingRoster && stats.missingCount > 0 && stats.draftCount > 0 && (
+        <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm font-semibold text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+          <span>
+            <strong>Missing Marks Notice:</strong> {stats.missingCount} of {stats.total} enrolled student
+            {stats.missingCount > 1 ? "s" : ""} have no saved marks for this assessment. Complete all drafts
+            or confirm partial publication to proceed.
+          </span>
+        </div>
+      )}
 
       {/* Context Selection Toolbar */}
       <section className="grid gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:grid-cols-4">
@@ -473,7 +595,7 @@ export default function TeacherMarksWorkspacePage() {
               Category
               <select
                 value={assessmentType}
-                onChange={(e) => setAssessmentType(e.target.value as AssessmentType)}
+                onChange={(e) => handleCategoryChange(e.target.value as AssessmentType)}
                 className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2.5 text-xs font-semibold text-slate-900 focus:border-blue-600 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               >
                 {ASSESSMENT_TYPES.map((t) => (
@@ -487,7 +609,7 @@ export default function TeacherMarksWorkspacePage() {
               Term
               <select
                 value={term}
-                onChange={(e) => setTerm(e.target.value)}
+                onChange={(e) => handleTermChange(e.target.value)}
                 className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2.5 text-xs font-semibold text-slate-900 focus:border-blue-600 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               >
                 <option value="Term 1">Term 1</option>
@@ -505,7 +627,7 @@ export default function TeacherMarksWorkspacePage() {
       </section>
 
       {/* Summary Metrics Bar */}
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-5">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <p className="text-xs font-bold text-slate-400">Students in Class</p>
           <p className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.total}</p>
@@ -517,18 +639,18 @@ export default function TeacherMarksWorkspacePage() {
           </p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-xs font-bold text-slate-400">Class Average</p>
-          <p className="mt-2 text-2xl font-black text-emerald-600">
-            {stats.average !== null ? `${stats.average}%` : "—"}
-          </p>
+          <p className="text-xs font-bold text-slate-400">Drafts Saved</p>
+          <p className="mt-2 text-2xl font-black text-indigo-600">{stats.draftCount}</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-xs font-bold text-slate-400">Status</p>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold dark:bg-slate-800">
-              {stats.publishedCount > 0 ? `${stats.publishedCount} Published` : "Draft Mode"}
-            </span>
-          </div>
+          <p className="text-xs font-bold text-slate-400">Published Results</p>
+          <p className="mt-2 text-2xl font-black text-emerald-600">{stats.publishedCount}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-xs font-bold text-slate-400">Class Average</p>
+          <p className="mt-2 text-2xl font-black text-slate-900 dark:text-white">
+            {stats.average !== null ? `${stats.average}%` : "—"}
+          </p>
         </div>
       </div>
 
@@ -563,6 +685,18 @@ export default function TeacherMarksWorkspacePage() {
               >
                 <CheckCircle2 className="h-4 w-4" />
                 {saving ? "Saving Drafts…" : "Save Draft"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmPartial(false);
+                  setShowPublishModal(true);
+                }}
+                disabled={publishing || saving || loadingRoster || hasUnsavedChanges || stats.draftCount === 0}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <Send className="h-4 w-4" />
+                Publish Results
               </button>
             </div>
           </div>
@@ -599,8 +733,13 @@ export default function TeacherMarksWorkspacePage() {
                     >
                       {/* Student info */}
                       <td className="px-6 py-4">
-                        <p className="font-bold text-slate-900 dark:text-white">{student.name}</p>
-                        <p className="text-xs text-slate-400">{student.email}</p>
+                        <div className="flex items-center gap-2">
+                          {isPublished && <Lock className="h-3.5 w-3.5 text-emerald-600 shrink-0" />}
+                          <div>
+                            <p className="font-bold text-slate-900 dark:text-white">{student.name}</p>
+                            <p className="text-xs text-slate-400">{student.email}</p>
+                          </div>
+                        </div>
                       </td>
 
                       {/* Marks input */}
@@ -649,12 +788,17 @@ export default function TeacherMarksWorkspacePage() {
                         />
                       </td>
 
-                      {/* Status */}
+                      {/* Status badge */}
                       <td className="px-6 py-4">
                         {isPublished ? (
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                             <CheckCircle2 className="h-3.5 w-3.5" />
                             Published
+                          </span>
+                        ) : row.isDirty ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                            <AlertCircle className="h-3.5 w-3.5" />
+                            Unsaved Draft
                           </span>
                         ) : row.status === "DRAFT" ? (
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
@@ -663,7 +807,7 @@ export default function TeacherMarksWorkspacePage() {
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                            Not Saved
+                            No Score
                           </span>
                         )}
                       </td>
@@ -679,15 +823,150 @@ export default function TeacherMarksWorkspacePage() {
             <p className="text-xs text-slate-500">
               Showing {filteredStudents.length} of {students.length} enrolled students
             </p>
-            <button
-              type="button"
-              onClick={() => void saveDrafts()}
-              disabled={saving || !hasUnsavedChanges}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              {saving ? "Saving Drafts…" : "Save Draft"}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void saveDrafts()}
+                disabled={saving || !hasUnsavedChanges}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {saving ? "Saving Drafts…" : "Save Draft"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmPartial(false);
+                  setShowPublishModal(true);
+                }}
+                disabled={publishing || saving || loadingRoster || hasUnsavedChanges || stats.draftCount === 0}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <Send className="h-4 w-4" />
+                Publish Results
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal for Publication */}
+      {showPublishModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 space-y-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                  Publish Academic Marks
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Confirm publication to release results to authorized students and parents.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPublishModal(false)}
+                className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Context Summary */}
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/50 space-y-2.5 text-xs">
+              <div className="flex justify-between">
+                <span className="font-bold text-slate-500">Class:</span>
+                <span className="font-black text-slate-900 dark:text-white">{selectedClass}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-bold text-slate-500">Subject:</span>
+                <span className="font-black text-slate-900 dark:text-white">{selectedSubject}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-bold text-slate-500">Assessment:</span>
+                <span className="font-black text-blue-600">{activeAssessmentTitle}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-bold text-slate-500">Enrolled Students:</span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">{stats.total}</span>
+              </div>
+              <div className="flex justify-between border-t border-slate-200 pt-2 dark:border-slate-700">
+                <span className="font-bold text-slate-500">Drafts to Publish:</span>
+                <span className="font-black text-emerald-600">{stats.draftCount}</span>
+              </div>
+              {stats.publishedCount > 0 && (
+                <div className="flex justify-between">
+                  <span className="font-bold text-slate-500">Already Published:</span>
+                  <span className="font-bold text-slate-700 dark:text-slate-300">{stats.publishedCount}</span>
+                </div>
+              )}
+              {stats.missingCount > 0 && (
+                <div className="flex justify-between">
+                  <span className="font-bold text-slate-500">Missing Marks:</span>
+                  <span className="font-bold text-rose-600">{stats.missingCount}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Security Notice */}
+            <div className="rounded-2xl bg-blue-50/80 p-3.5 text-xs text-blue-900 dark:bg-blue-950/30 dark:text-blue-200 space-y-1">
+              <p className="font-bold">🔒 Publication & Immutability Guarantee:</p>
+              <p>
+                Published marks become immediately accessible to students and linked parents in their portals.
+                Once published, entries are locked against further direct teacher edits.
+              </p>
+            </div>
+
+            {/* Incomplete Roster Warning & Confirmation Checkbox */}
+            {stats.missingCount > 0 && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30 space-y-3">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+                  <div className="text-xs text-amber-900 dark:text-amber-200">
+                    <p className="font-bold">Incomplete Roster Detected</p>
+                    <p className="mt-0.5">
+                      {stats.missingCount} student(s) do not have saved marks. To publish only the available {stats.draftCount} marks, you must confirm partial publication.
+                    </p>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-xs font-bold text-amber-900 dark:text-amber-200 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={confirmPartial}
+                    onChange={(e) => setConfirmPartial(e.target.checked)}
+                    className="h-4 w-4 rounded border-amber-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  I confirm partial publication for {stats.draftCount} students.
+                </label>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowPublishModal(false)}
+                disabled={publishing}
+                className="rounded-xl border border-slate-200 px-5 py-2.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handlePublish()}
+                disabled={publishing || (stats.missingCount > 0 && !confirmPartial)}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-bold text-white shadow-md transition hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {publishing ? (
+                  "Publishing…"
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Confirm &amp; Publish
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

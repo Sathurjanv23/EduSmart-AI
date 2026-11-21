@@ -67,4 +67,35 @@ describe("Teacher marks workspace row evaluation logic", () => {
     const isLocked = rows["s-2"].status === "PUBLISHED";
     expect(isLocked).toBe(true);
   });
+
+  it("calculates publication readiness metrics and missing marks correctly", () => {
+    const students = ["s-1", "s-2", "s-3", "s-4", "s-5"];
+    const rows = {
+      "s-1": { marks: "85", status: "DRAFT", isDirty: false },
+      "s-2": { marks: "90", status: "DRAFT", isDirty: false },
+      "s-3": { marks: "78", status: "PUBLISHED", isDirty: false },
+      "s-4": { marks: "65", status: "DRAFT", isDirty: true }, // dirty -> unsaved
+      "s-5": { marks: "", status: "UNSAVED", isDirty: false }, // no mark
+    };
+
+    let draftCount = 0;
+    let publishedCount = 0;
+    let unsavedCount = 0;
+
+    students.forEach((id) => {
+      const r = rows[id as keyof typeof rows];
+      if (r.isDirty) unsavedCount++;
+      if (r.status === "PUBLISHED") publishedCount++;
+      else if (r.status === "DRAFT" && !r.isDirty) draftCount++;
+    });
+
+    const total = students.length;
+    const missingCount = Math.max(0, total - (publishedCount + draftCount));
+
+    expect(total).toBe(5);
+    expect(draftCount).toBe(2); // s-1 and s-2
+    expect(publishedCount).toBe(1); // s-3
+    expect(unsavedCount).toBe(1); // s-4
+    expect(missingCount).toBe(2); // s-4 (unsaved draft) and s-5 (no mark)
+  });
 });

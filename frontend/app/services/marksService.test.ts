@@ -8,6 +8,7 @@ import {
   getMarksByClassAndSubject,
   getMarksByStudent,
   getMyMarks,
+  publishMarks,
   updateMarks,
 } from "./marksService";
 
@@ -94,5 +95,46 @@ describe("marksService API client integration", () => {
     await getMarksByStudent("student/1");
 
     expect(apiRequest).toHaveBeenCalledWith("/marks/student/student%2F1");
+  });
+
+  it("getMarksByClassAndSubject includes assessmentType and term query params", async () => {
+    apiRequest.mockResolvedValueOnce([]);
+
+    await getMarksByClassAndSubject("GRADE-10-A", "Mathematics", undefined, "CLASS_TEST", "Term 1");
+
+    expect(apiRequest).toHaveBeenCalledWith(
+      "/marks/class/GRADE-10-A/subject/Mathematics?assessmentType=CLASS_TEST&term=Term+1"
+    );
+  });
+
+  it("publishMarks sends POST to /marks/publish with complete context payload", async () => {
+    const mockResponse = {
+      classId: "GRADE-10-A",
+      subject: "Mathematics",
+      publishedCount: 15,
+      alreadyPublishedCount: 0,
+      totalTargeted: 15,
+      publishedIds: ["m-1", "m-2"],
+      alreadyPublishedIds: [],
+      message: "Successfully published marks for 15 student(s).",
+    };
+    apiRequest.mockResolvedValueOnce(mockResponse);
+
+    const payload = {
+      classId: "GRADE-10-A",
+      subject: "Mathematics",
+      examId: "exam-101",
+      markIds: ["m-1", "m-2"],
+      allowPartial: false,
+    };
+
+    const result = await publishMarks(payload);
+
+    expect(apiRequest).toHaveBeenCalledWith("/marks/publish", {
+      method: "POST",
+      body: payload,
+    });
+    expect(result.publishedCount).toBe(15);
+    expect(result.classId).toBe("GRADE-10-A");
   });
 });

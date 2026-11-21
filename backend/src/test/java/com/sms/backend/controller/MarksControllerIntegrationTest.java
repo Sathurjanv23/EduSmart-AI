@@ -26,6 +26,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sms.backend.dto.MarksRequest;
+import com.sms.backend.dto.PublishMarksRequest;
+import com.sms.backend.dto.PublishMarksResponse;
 import com.sms.backend.exception.ApiException;
 import com.sms.backend.model.Marks;
 import com.sms.backend.model.Student;
@@ -268,5 +270,110 @@ class MarksControllerIntegrationTest {
 
         verify(accessService).requireStudentAccess(any(), eq("student-1"));
         verify(marksService).getMarksByStudent("student-1");
+    }
+
+    @Test
+    @DisplayName("Teacher publishes marks with valid CSRF token succeeds with 200 OK")
+    @WithMockUser(username = "teacher@school.test", authorities = "TEACHER")
+    void teacherPublishesMarksSuccess() throws Exception {
+        PublishMarksRequest request = new PublishMarksRequest("GRADE-10-A", "Mathematics", "exam-1", null, false);
+        PublishMarksResponse response = new PublishMarksResponse(
+                "GRADE-10-A", "Mathematics", "exam-1", "exam-1", 5, 0, 5,
+                List.of("m-1", "m-2", "m-3", "m-4", "m-5"), List.of(), "Successfully published marks for 5 student(s)."
+        );
+
+        when(marksService.publishMarks(any(), eq("teacher@school.test"))).thenReturn(response);
+
+        mockMvc.perform(post("/api/marks/publish")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.classId").value("GRADE-10-A"))
+                .andExpect(jsonPath("$.publishedCount").value(5))
+                .andExpect(jsonPath("$.alreadyPublishedCount").value(0));
+
+        verify(accessService).requireTeacherClass(any(), eq("GRADE-10-A"));
+        verify(accessService).requireTeacherSubject(any(), eq("Mathematics"));
+    }
+
+    @Test
+    @DisplayName("POST /api/marks/publish without CSRF token is rejected with 403 Forbidden")
+    @WithMockUser(username = "teacher@school.test", authorities = "TEACHER")
+    void publishMarksWithoutCsrfRejected() throws Exception {
+        PublishMarksRequest request = new PublishMarksRequest("GRADE-10-A", "Mathematics", "exam-1", null, false);
+
+        mockMvc.perform(post("/api/marks/publish")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Teacher unauthorized for class is rejected on POST /api/marks/publish with 403 Forbidden")
+    @WithMockUser(username = "teacher@school.test", authorities = "TEACHER")
+    void publishMarksUnauthorizedClassRejected() throws Exception {
+        PublishMarksRequest request = new PublishMarksRequest("GRADE-12-Z", "Mathematics", null, null, false);
+
+        doThrow(ApiException.forbidden("This class is not assigned to the current teacher"))
+                .when(accessService).requireTeacherClass(any(), eq("GRADE-12-Z"));
+
+        mockMvc.perform(post("/api/marks/publish")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Student attempting to POST /api/marks/publish is rejected with 403 Forbidden")
+    @WithMockUser(username = "student@school.test", authorities = "STUDENT")
+    void studentCannotPublishMarks() throws Exception {
+        PublishMarksRequest request = new PublishMarksRequest("GRADE-10-A", "Mathematics", null, null, false);
+
+        doThrow(ApiException.forbidden("TEACHER access is required"))
+                .when(accessService).requireTeacherClass(any(), eq("GRADE-10-A"));
+
+        mockMvc.perform(post("/api/marks/publish")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Parent attempting to POST /api/marks/publish is rejected with 403 Forbidden")
+    @WithMockUser(username = "parent@school.test", authorities = "PARENT")
+    void parentCannotPublishMarks() throws Exception {
+        PublishMarksRequest request = new PublishMarksRequest("GRADE-10-A", "Mathematics", null, null, false);
+
+        doThrow(ApiException.forbidden("TEACHER access is required"))
+                .when(accessService).requireTeacherClass(any(), eq("GRADE-10-A"));
+
+        mockMvc.perform(post("/api/marks/publish")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Admin can publish marks")
+    @WithMockUser(username = "admin@school.test", authorities = "ADMIN")
+    void adminCanPublishMarks() throws Exception {
+        PublishMarksRequest request = new PublishMarksRequest("GRADE-10-A", "Mathematics", null, null, true);
+        PublishMarksResponse response = new PublishMarksResponse(
+                "GRADE-10-A", "Mathematics", null, "GENERAL#T1", 2, 0, 2,
+                List.of("m-1", "m-2"), List.of(), "Admin published marks"
+        );
+
+        when(marksService.publishMarks(any(), eq("admin@school.test"))).thenReturn(response);
+
+        mockMvc.perform(post("/api/marks/publish")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.publishedCount").value(2));
     }
 }

@@ -376,4 +376,37 @@ class MarksControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.publishedCount").value(2));
     }
+
+    @Test
+    @DisplayName("Student attempting to access another student's marks is rejected with 403 Forbidden")
+    @WithMockUser(username = "student1@school.test", authorities = "STUDENT")
+    void studentCannotAccessOtherStudentMarks() throws Exception {
+        doThrow(ApiException.forbidden("You may only access linked student records"))
+                .when(accessService).requireStudentAccess(any(), eq("other-student-id"));
+
+        mockMvc.perform(get("/api/marks/student/other-student-id"))
+                .andExpect(status().isForbidden());
+
+        verify(accessService).requireStudentAccess(any(), eq("other-student-id"));
+    }
+
+    @Test
+    @DisplayName("Parent attempting to access unlinked student's marks is rejected with 403 Forbidden")
+    @WithMockUser(username = "parent@school.test", authorities = "PARENT")
+    void parentCannotAccessUnlinkedStudentMarks() throws Exception {
+        doThrow(ApiException.forbidden("You may only access linked student records"))
+                .when(accessService).requireStudentAccess(any(), eq("unlinked-student-id"));
+
+        mockMvc.perform(get("/api/marks/student/unlinked-student-id"))
+                .andExpect(status().isForbidden());
+
+        verify(accessService).requireStudentAccess(any(), eq("unlinked-student-id"));
+    }
+
+    @Test
+    @DisplayName("Unauthenticated request to GET /api/marks/student/{id} returns 401 Unauthorized")
+    void unauthenticatedStudentMarksAccessDenied() throws Exception {
+        mockMvc.perform(get("/api/marks/student/student-1"))
+                .andExpect(status().isUnauthorized());
+    }
 }

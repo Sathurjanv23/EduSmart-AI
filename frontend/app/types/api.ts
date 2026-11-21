@@ -33,16 +33,29 @@ export interface AttendanceRecord {
   remark?: string;
 }
 
+export type AssessmentType = "TERM_TEST" | "MID_TERM" | "FINAL" | "CLASS_TEST" | "ASSIGNMENT" | "OTHER";
+export type MarksStatus = "DRAFT" | "PUBLISHED";
+
 export interface MarkRecord {
   id: string;
   studentId?: string;
   studentName?: string;
+  parentEmail?: string;
+  classId?: string;
   subject: string;
+  assessmentType?: AssessmentType;
+  term?: string;
   marks?: number;
   marksObtained?: number;
   totalMarks?: number;
+  comments?: string;
+  status?: MarksStatus;
+  publishedAt?: string;
+  publishedBy?: string;
   examId?: string;
+  recordedBy?: string;
   recordedAt?: string;
+  updatedAt?: string;
 }
 
 export interface Exam {

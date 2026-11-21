@@ -51,6 +51,7 @@ export default function TeacherMarksWorkspacePage() {
   const [selectedExamId, setSelectedExamId] = useState("");
   const [assessmentType, setAssessmentType] = useState<AssessmentType>("CLASS_TEST");
   const [term, setTerm] = useState("Term 1");
+  const [assessmentIdentifier, setAssessmentIdentifier] = useState("");
   const [defaultTotalMarks, setDefaultTotalMarks] = useState<number>(100);
 
   const [students, setStudents] = useState<Student[]>([]);
@@ -145,7 +146,10 @@ export default function TeacherMarksWorkspacePage() {
           selectedSubject,
           selectedExamId || undefined,
           !selectedExamId ? assessmentType : undefined,
-          !selectedExamId ? term : undefined
+          !selectedExamId ? term : undefined,
+          !selectedExamId && assessmentIdentifier.trim()
+            ? `${assessmentType}#${term}#${assessmentIdentifier.trim()}`
+            : undefined
         ),
       ]);
 
@@ -189,7 +193,7 @@ export default function TeacherMarksWorkspacePage() {
     } finally {
       setLoadingRoster(false);
     }
-  }, [selectedClass, selectedSubject, selectedExamId, assessmentType, term, defaultTotalMarks]);
+  }, [selectedClass, selectedSubject, selectedExamId, assessmentType, term, assessmentIdentifier, defaultTotalMarks]);
 
   useEffect(() => {
     void loadStudentsAndMarks();
@@ -244,6 +248,28 @@ export default function TeacherMarksWorkspacePage() {
       }
     }
     setTerm(newTerm);
+  };
+
+  const handleIdentifierChange = (newId: string) => {
+    if (hasUnsavedChanges) {
+      if (!window.confirm("You have unsaved marks. Discard them and switch assessment?")) {
+        return;
+      }
+    }
+    setAssessmentIdentifier(newId);
+  };
+
+  // Keyboard navigation across students in marks table
+  const handleScoreKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+    if (e.key === "Enter" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const nextInput = document.querySelector<HTMLInputElement>(`input[data-score-index="${index + 1}"]`);
+      if (nextInput) nextInput.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prevInput = document.querySelector<HTMLInputElement>(`input[data-score-index="${index - 1}"]`);
+      if (prevInput) prevInput.focus();
+    }
   };
 
   // Row update handlers
@@ -327,6 +353,10 @@ export default function TeacherMarksWorkspacePage() {
         examId: selectedExamId ? selectedExamId : undefined,
         assessmentType: !selectedExamId ? assessmentType : undefined,
         term: !selectedExamId ? term : undefined,
+        assessmentId:
+          !selectedExamId && assessmentIdentifier.trim()
+            ? `${assessmentType}#${term}#${assessmentIdentifier.trim()}`
+            : undefined,
         comments: row.comments || undefined,
       };
 
@@ -386,6 +416,10 @@ export default function TeacherMarksWorkspacePage() {
       examId: selectedExamId ? selectedExamId : undefined,
       assessmentType: !selectedExamId ? assessmentType : undefined,
       term: !selectedExamId ? term : undefined,
+      assessmentId:
+        !selectedExamId && assessmentIdentifier.trim()
+          ? `${assessmentType}#${term}#${assessmentIdentifier.trim()}`
+          : undefined,
       markIds: eligibleDraftIds.length > 0 ? eligibleDraftIds : undefined,
       allowPartial: confirmPartial || stats.missingCount === 0,
     };
@@ -590,7 +624,7 @@ export default function TeacherMarksWorkspacePage() {
 
         {/* Context-specific attributes (Assessment Type or Max Marks) */}
         {!selectedExamId ? (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <label className="grid gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300">
               Category
               <select
@@ -616,6 +650,16 @@ export default function TeacherMarksWorkspacePage() {
                 <option value="Term 2">Term 2</option>
                 <option value="Term 3">Term 3</option>
               </select>
+            </label>
+            <label className="grid gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300">
+              Test # (Opt)
+              <input
+                type="text"
+                placeholder="e.g. 1, Quiz 2"
+                value={assessmentIdentifier}
+                onChange={(e) => handleIdentifierChange(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-900 focus:border-blue-600 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
             </label>
           </div>
         ) : (
@@ -752,6 +796,11 @@ export default function TeacherMarksWorkspacePage() {
                             disabled={isPublished}
                             placeholder="Score"
                             value={row.marks}
+                            data-score-index={filteredStudents.findIndex((s) => s.id === student.id)}
+                            onKeyDown={(e) =>
+                              handleScoreKeyDown(e, filteredStudents.findIndex((s) => s.id === student.id))
+                            }
+                            aria-label={`Marks obtained for ${student.name} (out of ${row.totalMarks})`}
                             onChange={(e) =>
                               handleScoreChange(student.id, e.target.value, row.totalMarks)
                             }
@@ -783,6 +832,7 @@ export default function TeacherMarksWorkspacePage() {
                           disabled={isPublished}
                           placeholder="Teacher remarks (optional)"
                           value={row.comments}
+                          aria-label={`Teacher remarks for ${student.name}`}
                           onChange={(e) => handleCommentsChange(student.id, e.target.value)}
                           className="w-full max-w-xs rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-blue-600 focus:outline-none disabled:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                         />

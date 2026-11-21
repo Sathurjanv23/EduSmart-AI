@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sms.backend.dto.MarksRequest;
+import com.sms.backend.dto.PublishMarksRequest;
+import com.sms.backend.dto.PublishMarksResponse;
 import com.sms.backend.model.Marks;
 import com.sms.backend.model.Student;
 import com.sms.backend.security.AcademicAccessService;
@@ -100,6 +102,9 @@ public class MarksController {
             @PathVariable String classId,
             @PathVariable String subject,
             @RequestParam(required = false) String examId,
+            @RequestParam(required = false) String assessmentType,
+            @RequestParam(required = false) String term,
+            @RequestParam(required = false) String assessmentId,
             Authentication authentication) {
         accessService.requireTeacherClass(authentication, classId);
         accessService.requireTeacherSubject(authentication, subject);
@@ -107,6 +112,25 @@ public class MarksController {
         if (examId != null && !examId.isBlank()) {
             return marksService.getMarksByClassSubjectAndExam(classId, subject, examId.trim());
         }
+        if ((assessmentType != null && !assessmentType.isBlank())
+                || (term != null && !term.isBlank())
+                || (assessmentId != null && !assessmentId.isBlank())) {
+            String resolvedId = MarksService.buildAssessmentId(null, assessmentId, assessmentType, term);
+            return marksService.getMarksByClassSubjectAndAssessment(classId, subject, resolvedId);
+        }
         return marksService.getMarksByClassAndSubject(classId, subject);
+    }
+
+    /**
+     * Publishes saved draft marks for an assessment, class, and subject context.
+     * Transitions draft marks to published state, exposing them to authorized students and parents.
+     */
+    @PostMapping("/publish")
+    public PublishMarksResponse publishMarks(
+            @Valid @RequestBody PublishMarksRequest request,
+            Authentication authentication) {
+        accessService.requireTeacherClass(authentication, request.classId());
+        accessService.requireTeacherSubject(authentication, request.subject());
+        return marksService.publishMarks(request, authentication.getName());
     }
 }

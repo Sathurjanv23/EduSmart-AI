@@ -1,12 +1,17 @@
 package com.sms.backend.service;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
 import com.sms.backend.dto.MarksRequest;
+import com.sms.backend.dto.PublishMarksRequest;
+import com.sms.backend.dto.PublishMarksResponse;
 import com.sms.backend.exception.ApiException;
 import com.sms.backend.model.Exam;
 import com.sms.backend.model.Marks;
@@ -43,10 +48,12 @@ public class MarksService {
 
         String resolvedExamId = resolveExamId(request.examId());
         validateExamLink(request, student, resolvedExamId);
-        checkDuplicateOnCreate(request.studentId(), request.subject(), resolvedExamId);
+
+        String resolvedAssessmentId = buildAssessmentId(resolvedExamId, request.assessmentId(), request.assessmentType(), request.term());
+        checkDuplicateOnCreate(request.studentId(), request.subject(), resolvedExamId, resolvedAssessmentId);
 
         Marks marks = new Marks();
-        apply(marks, request, student, resolvedExamId, recordedBy);
+        apply(marks, request, student, resolvedExamId, resolvedAssessmentId, recordedBy);
         marks.setRecordedAt(Instant.now());
         marks.setStatus(STATUS_DRAFT);
         return marksRepository.save(marks);
@@ -66,10 +73,127 @@ public class MarksService {
 
         String resolvedExamId = resolveExamId(request.examId());
         validateExamLink(request, student, resolvedExamId);
-        checkDuplicateOnUpdate(request.studentId(), request.subject(), resolvedExamId, id);
 
-        apply(marks, request, student, resolvedExamId, recordedBy);
+        String resolvedAssessmentId = buildAssessmentId(resolvedExamId, request.assessmentId(), request.assessmentType(), request.term());
+        checkDuplicateOnUpdate(request.studentId(), request.subject(), resolvedExamId, resolvedAssessmentId, id);
+
+        apply(marks, request, student, resolvedExamId, resolvedAssessmentId, recordedBy);
         return marksRepository.save(marks);
+    }
+
+    /**
+     * Publishes marks for a specific assessment context.
+     * Enforces teacher authorization, score validity, and completeness (unless allowPartial is true).
+     * Designed to be safe, idempotent, and resilient against concurrent/duplicate requests.
+     */
+    public PublishMarksResponse publishMarks(PublishMarksRequest request, String publishedBy) {
+        if (request.classId() == null || request.classId().isBlank()) {
+            throw ApiException.badRequest("INVALID_CLASS", "Class ID is required");
+        }
+        if (request.subject() == null || request.subject().isBlank()) {
+            throw ApiException.badRequest("INVALID_SUBJECT", "Subject is required");
+        }
+
+        String targetAssessmentId = buildAssessmentId(request.examId(), request.assessmentId(), request.assessmentType(), request.term());
+
+        List<Marks> candidates;
+        if (request.markIds() != null && !request.markIds().isEmpty()) {
+            candidates = new ArrayList<>();
+            for (String markId : request.markIds()) {
+                Marks m = requireById(markId);
+                if (!m.getClassId().equals(request.classId())) {
+                    throw ApiException.badRequest("CONTEXT_MISMATCH",
+                            "Mark record " + markId + " does not belong to class " + request.classId());
+                }
+                if (!m.getSubject().equalsIgnoreCase(request.subject())) {
+                    throw ApiException.badRequest("CONTEXT_MISMATCH",
+                            "Mark record " + markId + " does not belong to subject " + request.subject());
+                }
+                if (request.examId() != null && !request.examId().isBlank()
+                        && !request.examId().equals(m.getExamId())) {
+                    throw ApiException.badRequest("CONTEXT_MISMATCH",
+                            "Mark record " + markId + " does not belong to exam " + request.examId());
+                }
+                candidates.add(m);
+            }
+        } else {
+            List<Marks> allInContext = marksRepository.findByClassIdAndSubjectIgnoreCaseOrderByStudentNameAsc(
+                    request.classId(), request.subject());
+            if (request.examId() != null && !request.examId().isBlank()) {
+                candidates = allInContext.stream()
+                        .filter(m -> request.examId().equals(m.getExamId()))
+                        .toList();
+            } else if (targetAssessmentId != null && !targetAssessmentId.equals("GENERAL#T1")) {
+                candidates = allInContext.stream()
+                        .filter(m -> targetAssessmentId.equalsIgnoreCase(m.getEffectiveAssessmentId()))
+                        .toList();
+            } else {
+                candidates = allInContext;
+            }
+        }
+
+        if (candidates.isEmpty()) {
+            throw ApiException.badRequest("NO_MARKS_TO_PUBLISH",
+                    "No marks records found to publish for the specified context.");
+        }
+
+        List<Marks> toPublish = new ArrayList<>();
+        List<Marks> alreadyPublished = new ArrayList<>();
+        Set<String> coveredStudentIds = new HashSet<>();
+
+        for (Marks m : candidates) {
+            validateRange(m.getMarks(), m.getTotalMarks());
+            coveredStudentIds.add(m.getStudentId());
+            if (STATUS_PUBLISHED.equals(m.getStatus())) {
+                alreadyPublished.add(m);
+            } else {
+                toPublish.add(m);
+            }
+        }
+
+        // Roster completeness enforcement (Requirement 9)
+        if (!request.allowPartial()) {
+            List<Student> enrolledStudents = studentRepository.findByStudentClass(request.classId());
+            if (coveredStudentIds.size() < enrolledStudents.size()) {
+                int missingCount = enrolledStudents.size() - coveredStudentIds.size();
+                throw ApiException.badRequest("INCOMPLETE_ROSTER_MARKS",
+                        "Cannot publish: " + missingCount + " student(s) in class " + request.classId()
+                                + " are missing marks for this assessment. Complete all marks or enable partial publication.");
+            }
+        }
+
+        // Persist publication state
+        Instant now = Instant.now();
+        for (Marks m : toPublish) {
+            m.setStatus(STATUS_PUBLISHED);
+            m.setPublishedAt(now);
+            m.setPublishedBy(publishedBy);
+            m.setUpdatedAt(now);
+            if (m.getAssessmentId() == null) {
+                m.setAssessmentId(m.getEffectiveAssessmentId());
+            }
+        }
+
+        if (!toPublish.isEmpty()) {
+            marksRepository.saveAll(toPublish);
+        }
+
+        String summaryMessage = toPublish.isEmpty()
+                ? "All targeted marks are already published."
+                : "Successfully published marks for " + toPublish.size() + " student(s).";
+
+        return new PublishMarksResponse(
+                request.classId(),
+                request.subject(),
+                request.examId(),
+                targetAssessmentId,
+                toPublish.size(),
+                alreadyPublished.size(),
+                candidates.size(),
+                toPublish.stream().map(Marks::getId).toList(),
+                alreadyPublished.stream().map(Marks::getId).toList(),
+                summaryMessage
+        );
     }
 
     public List<Marks> getAllMarks() {
@@ -104,11 +228,21 @@ public class MarksService {
         return marksRepository.findByClassIdAndSubjectIgnoreCaseAndExamIdOrderByStudentNameAsc(classId, subject, examId);
     }
 
+    /**
+     * Teacher marks roster view: retrieves marks for a class, subject, and assessment identifier.
+     */
+    public List<Marks> getMarksByClassSubjectAndAssessment(String classId, String subject, String assessmentId) {
+        List<Marks> all = marksRepository.findByClassIdAndSubjectIgnoreCaseOrderByStudentNameAsc(classId, subject);
+        return all.stream()
+                .filter(m -> assessmentId.equalsIgnoreCase(m.getEffectiveAssessmentId()))
+                .toList();
+    }
+
     public Marks requireById(String id) {
         return marksRepository.findById(id).orElseThrow(() -> ApiException.notFound("Marks record"));
     }
 
-    private void apply(Marks marks, MarksRequest request, Student student, String resolvedExamId, String recordedBy) {
+    private void apply(Marks marks, MarksRequest request, Student student, String resolvedExamId, String resolvedAssessmentId, String recordedBy) {
         marks.setStudentId(student.getId());
         marks.setStudentName(student.getName());
         marks.setParentEmail(student.getParentEmail());
@@ -120,6 +254,7 @@ public class MarksService {
         marks.setMarks(request.marks());
         marks.setTotalMarks(request.totalMarks());
         marks.setExamId(resolvedExamId);
+        marks.setAssessmentId(resolvedAssessmentId);
         marks.setRecordedBy(recordedBy);
         marks.setUpdatedAt(Instant.now());
     }
@@ -132,6 +267,18 @@ public class MarksService {
 
     private String resolveExamId(String examId) {
         return (examId == null || examId.isBlank()) ? null : examId.trim();
+    }
+
+    public static String buildAssessmentId(String examId, String assessmentId, String assessmentType, String term) {
+        if (assessmentId != null && !assessmentId.isBlank()) {
+            return assessmentId.trim();
+        }
+        if (examId != null && !examId.isBlank()) {
+            return examId.trim();
+        }
+        String typePart = (assessmentType != null && !assessmentType.isBlank()) ? assessmentType.trim() : "GENERAL";
+        String termPart = (term != null && !term.isBlank()) ? term.trim() : "T1";
+        return typePart + "#" + termPart;
     }
 
     private void validateExamLink(MarksRequest request, Student student, String resolvedExamId) {
@@ -153,29 +300,45 @@ public class MarksService {
         }
     }
 
-    private void checkDuplicateOnCreate(String studentId, String subject, String examId) {
-        if (examId == null) {
-            return; // Non-exam continuous assessments allow multiple entries or are updated via ID
+    private void checkDuplicateOnCreate(String studentId, String subject, String resolvedExamId, String assessmentId) {
+        if (resolvedExamId != null && !resolvedExamId.isBlank()) {
+            marksRepository.findByStudentIdAndSubjectIgnoreCaseAndExamId(studentId, subject, resolvedExamId)
+                    .ifPresent(existing -> {
+                        throw ApiException.conflict("DUPLICATE_MARKS_RECORD",
+                                "A marks record already exists for this student, subject, and exam. Use PUT /api/marks/"
+                                        + existing.getId() + " to update.");
+                    });
         }
-        marksRepository.findByStudentIdAndSubjectIgnoreCaseAndExamId(studentId, subject, examId)
-                .ifPresent(existing -> {
-                    throw ApiException.conflict("DUPLICATE_MARKS_RECORD",
-                            "A marks record already exists for this student, subject, and exam. Use PUT /api/marks/"
-                                    + existing.getId() + " to update.");
-                });
+        if (assessmentId != null && !assessmentId.isBlank()) {
+            marksRepository.findByStudentIdAndSubjectIgnoreCaseAndAssessmentId(studentId, subject, assessmentId)
+                    .ifPresent(existing -> {
+                        throw ApiException.conflict("DUPLICATE_MARKS_RECORD",
+                                "A marks record already exists for this student, subject, and assessment ("
+                                        + assessmentId + "). Use PUT /api/marks/" + existing.getId() + " to update.");
+                    });
+        }
     }
 
-    private void checkDuplicateOnUpdate(String studentId, String subject, String examId, String currentId) {
-        if (examId == null) {
-            return;
+    private void checkDuplicateOnUpdate(String studentId, String subject, String resolvedExamId, String assessmentId, String currentId) {
+        if (resolvedExamId != null && !resolvedExamId.isBlank()) {
+            marksRepository.findByStudentIdAndSubjectIgnoreCaseAndExamId(studentId, subject, resolvedExamId)
+                    .ifPresent(existing -> {
+                        if (!existing.getId().equals(currentId)) {
+                            throw ApiException.conflict("DUPLICATE_MARKS_RECORD",
+                                    "A marks record already exists for this student, subject, and exam.");
+                        }
+                    });
         }
-        marksRepository.findByStudentIdAndSubjectIgnoreCaseAndExamId(studentId, subject, examId)
-                .ifPresent(existing -> {
-                    if (!existing.getId().equals(currentId)) {
-                        throw ApiException.conflict("DUPLICATE_MARKS_RECORD",
-                                "A marks record already exists for this student, subject, and exam.");
-                    }
-                });
+        if (assessmentId != null && !assessmentId.isBlank()) {
+            marksRepository.findByStudentIdAndSubjectIgnoreCaseAndAssessmentId(studentId, subject, assessmentId)
+                    .ifPresent(existing -> {
+                        if (!existing.getId().equals(currentId)) {
+                            throw ApiException.conflict("DUPLICATE_MARKS_RECORD",
+                                    "A marks record already exists for this student, subject, and assessment ("
+                                            + assessmentId + ").");
+                        }
+                    });
+        }
     }
 
     private String normalizeAssessmentType(String assessmentType) {

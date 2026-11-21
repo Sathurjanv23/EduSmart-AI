@@ -20,6 +20,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.sms.backend.dto.AttendanceDTO;
 import com.sms.backend.dto.MarksRequest;
+import com.sms.backend.dto.PublishMarksRequest;
+import com.sms.backend.dto.PublishMarksResponse;
 import com.sms.backend.exception.ApiException;
 import com.sms.backend.model.Attendance;
 import com.sms.backend.model.Exam;
@@ -199,6 +201,165 @@ class AttendanceAndMarksServiceTest {
         List<Marks> result = marksService.getPublishedMarksByStudent("student-1");
         assertEquals(1, result.size());
         assertEquals("pub-1", result.get(0).getId());
+    }
+
+    @Test
+    void publishMarksCompleteRosterSuccess() {
+        Student s1 = new Student();
+        s1.setId("student-1");
+        s1.setStudentClass("GRADE-10-A");
+
+        Student s2 = new Student();
+        s2.setId("student-2");
+        s2.setStudentClass("GRADE-10-A");
+
+        Marks m1 = new Marks();
+        m1.setId("m-1");
+        m1.setStudentId("student-1");
+        m1.setClassId("GRADE-10-A");
+        m1.setSubject("Mathematics");
+        m1.setMarks(85);
+        m1.setTotalMarks(100);
+        m1.setStatus("DRAFT");
+        m1.setExamId("exam-1");
+
+        Marks m2 = new Marks();
+        m2.setId("m-2");
+        m2.setStudentId("student-2");
+        m2.setClassId("GRADE-10-A");
+        m2.setSubject("Mathematics");
+        m2.setMarks(90);
+        m2.setTotalMarks(100);
+        m2.setStatus("DRAFT");
+        m2.setExamId("exam-1");
+
+        when(marksRepository.findByClassIdAndSubjectIgnoreCaseOrderByStudentNameAsc("GRADE-10-A", "Mathematics"))
+                .thenReturn(List.of(m1, m2));
+        when(studentRepository.findByStudentClass("GRADE-10-A")).thenReturn(List.of(s1, s2));
+
+        PublishMarksRequest request = new PublishMarksRequest("GRADE-10-A", "Mathematics", "exam-1", null, false);
+        PublishMarksResponse response = marksService.publishMarks(request, "teacher@school.test");
+
+        assertEquals(2, response.publishedCount());
+        assertEquals(0, response.alreadyPublishedCount());
+        assertEquals(2, response.totalTargeted());
+        assertEquals("PUBLISHED", m1.getStatus());
+        assertEquals("PUBLISHED", m2.getStatus());
+        assertEquals("teacher@school.test", m1.getPublishedBy());
+        assertNotNull(m1.getPublishedAt());
+        verify(marksRepository).saveAll(any());
+    }
+
+    @Test
+    void publishMarksIncompleteRosterWithoutAllowPartialThrowsException() {
+        Student s1 = new Student();
+        s1.setId("student-1");
+        s1.setStudentClass("GRADE-10-A");
+
+        Student s2 = new Student();
+        s2.setId("student-2");
+        s2.setStudentClass("GRADE-10-A");
+
+        Marks m1 = new Marks();
+        m1.setId("m-1");
+        m1.setStudentId("student-1");
+        m1.setClassId("GRADE-10-A");
+        m1.setSubject("Mathematics");
+        m1.setMarks(85);
+        m1.setTotalMarks(100);
+        m1.setStatus("DRAFT");
+        m1.setExamId("exam-1");
+
+        // Only m1 is present, s2 is missing marks
+        when(marksRepository.findByClassIdAndSubjectIgnoreCaseOrderByStudentNameAsc("GRADE-10-A", "Mathematics"))
+                .thenReturn(List.of(m1));
+        when(studentRepository.findByStudentClass("GRADE-10-A")).thenReturn(List.of(s1, s2));
+
+        PublishMarksRequest request = new PublishMarksRequest("GRADE-10-A", "Mathematics", "exam-1", null, false);
+        ApiException ex = assertThrows(ApiException.class, () -> marksService.publishMarks(request, "teacher@school.test"));
+        assertEquals("INCOMPLETE_ROSTER_MARKS", ex.getCode());
+    }
+
+    @Test
+    void publishMarksPartialAllowedSucceeds() {
+        Student s1 = new Student();
+        s1.setId("student-1");
+        s1.setStudentClass("GRADE-10-A");
+
+        Marks m1 = new Marks();
+        m1.setId("m-1");
+        m1.setStudentId("student-1");
+        m1.setClassId("GRADE-10-A");
+        m1.setSubject("Mathematics");
+        m1.setMarks(85);
+        m1.setTotalMarks(100);
+        m1.setStatus("DRAFT");
+        m1.setExamId("exam-1");
+
+        when(marksRepository.findByClassIdAndSubjectIgnoreCaseOrderByStudentNameAsc("GRADE-10-A", "Mathematics"))
+                .thenReturn(List.of(m1));
+
+        PublishMarksRequest request = new PublishMarksRequest("GRADE-10-A", "Mathematics", "exam-1", null, true);
+        PublishMarksResponse response = marksService.publishMarks(request, "teacher@school.test");
+
+        assertEquals(1, response.publishedCount());
+        assertEquals(0, response.alreadyPublishedCount());
+        assertEquals("PUBLISHED", m1.getStatus());
+    }
+
+    @Test
+    void publishMarksIdempotentRetrySucceeds() {
+        Marks m1 = new Marks();
+        m1.setId("m-1");
+        m1.setStudentId("student-1");
+        m1.setClassId("GRADE-10-A");
+        m1.setSubject("Mathematics");
+        m1.setMarks(85);
+        m1.setTotalMarks(100);
+        m1.setStatus("PUBLISHED"); // Already published
+        m1.setExamId("exam-1");
+
+        when(marksRepository.findByClassIdAndSubjectIgnoreCaseOrderByStudentNameAsc("GRADE-10-A", "Mathematics"))
+                .thenReturn(List.of(m1));
+
+        PublishMarksRequest request = new PublishMarksRequest("GRADE-10-A", "Mathematics", "exam-1", null, true);
+        PublishMarksResponse response = marksService.publishMarks(request, "teacher@school.test");
+
+        assertEquals(0, response.publishedCount());
+        assertEquals(1, response.alreadyPublishedCount());
+        assertEquals(1, response.totalTargeted());
+    }
+
+    @Test
+    void publishMarksContextMismatchThrowsException() {
+        Marks m1 = new Marks();
+        m1.setId("m-1");
+        m1.setStudentId("student-1");
+        m1.setClassId("GRADE-12-B"); // Different class
+        m1.setSubject("Mathematics");
+
+        when(marksRepository.findById("m-1")).thenReturn(Optional.of(m1));
+
+        PublishMarksRequest request = new PublishMarksRequest("GRADE-10-A", "Mathematics", null, List.of("m-1"), true);
+        ApiException ex = assertThrows(ApiException.class, () -> marksService.publishMarks(request, "teacher@school.test"));
+        assertEquals("CONTEXT_MISMATCH", ex.getCode());
+    }
+
+    @Test
+    void nonExamAssessmentDuplicateThrowsConflict() {
+        Student student = student();
+        Marks existing = new Marks();
+        existing.setId("existing-1");
+
+        MarksRequest request = new MarksRequest(
+                "student-1", "Mathematics", 80, 100, null, "CLASS_TEST", "Term 1", "Good");
+
+        when(studentRepository.findById("student-1")).thenReturn(Optional.of(student));
+        when(marksRepository.findByStudentIdAndSubjectIgnoreCaseAndAssessmentId(
+                "student-1", "Mathematics", "CLASS_TEST#Term 1")).thenReturn(Optional.of(existing));
+
+        ApiException ex = assertThrows(ApiException.class, () -> marksService.addMarks(request, "teacher@school.test"));
+        assertEquals("DUPLICATE_MARKS_RECORD", ex.getCode());
     }
 
     private Student student() {

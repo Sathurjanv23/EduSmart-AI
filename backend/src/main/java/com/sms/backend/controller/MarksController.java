@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sms.backend.dto.MarksRequest;
@@ -64,17 +65,48 @@ public class MarksController {
         return marksService.getAllMarks();
     }
 
+    /**
+     * Authenticated Student view: returns only published marks.
+     * Prevents exposure of unpublished draft results.
+     */
     @GetMapping("/me")
     public List<Marks> getMyMarks(Authentication authentication) {
         Student student = accessService.currentStudent(authentication);
-        return marksService.getMarksByStudent(student.getId());
+        return marksService.getPublishedMarksByStudent(student.getId());
     }
 
+    /**
+     * Scoped student result lookup:
+     * - Admin / Teacher: can view all marks for the student.
+     * - Student / Parent: returns only published marks for privacy.
+     */
     @GetMapping("/student/{studentId}")
     public List<Marks> getMarksByStudent(
             @PathVariable String studentId,
             Authentication authentication) {
         accessService.requireStudentAccess(authentication, studentId);
-        return marksService.getMarksByStudent(studentId);
+        if (accessService.hasAuthority(authentication, "ADMIN") || accessService.hasAuthority(authentication, "TEACHER")) {
+            return marksService.getMarksByStudent(studentId);
+        }
+        return marksService.getPublishedMarksByStudent(studentId);
+    }
+
+    /**
+     * Teacher marks roster workspace query:
+     * Returns marks for an assigned class and subject, optionally filtered by exam.
+     */
+    @GetMapping("/class/{classId}/subject/{subject}")
+    public List<Marks> getMarksByClassAndSubject(
+            @PathVariable String classId,
+            @PathVariable String subject,
+            @RequestParam(required = false) String examId,
+            Authentication authentication) {
+        accessService.requireTeacherClass(authentication, classId);
+        accessService.requireTeacherSubject(authentication, subject);
+
+        if (examId != null && !examId.isBlank()) {
+            return marksService.getMarksByClassSubjectAndExam(classId, subject, examId.trim());
+        }
+        return marksService.getMarksByClassAndSubject(classId, subject);
     }
 }

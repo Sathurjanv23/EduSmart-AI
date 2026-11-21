@@ -11,7 +11,7 @@ import {
   LayoutDashboard, Users, Calendar, BookOpen, DollarSign, MessageSquare,
   Bus, Shield, Settings, FileText, School, X,
   ClipboardCheck, Presentation, PieChart, CreditCard,
-  BrainCircuit, Zap, BookMarked
+  BrainCircuit, Zap, BookMarked, Award
 } from 'lucide-react';
 
 // ─── Role colours for sidebar active states ───────────────────────────────────
@@ -64,6 +64,7 @@ const getSidebarGroupsForRole = (role: Role) => {
           items: [
             { name: 'Dashboard',       href: '/teacher/dashboard',  icon: LayoutDashboard },
             { name: 'Mark Attendance', href: '/teacher/attendance', icon: ClipboardCheck },
+            { name: 'Marks Entry',     href: '/teacher/marks',       icon: Award },
             { name: 'Exams & Marks',   href: '/teacher/exams',       icon: FileText },
             { name: 'Assignments',     href: '/teacher/assignments', icon: BookOpen },
             { name: 'Risk Predictor',  href: '/teacher/predictor',   icon: Zap },
